@@ -708,7 +708,13 @@ FQDRVpScanFileInUserMode(
 
 		//拷贝目标路径
 		FltParseFileNameInformation(nameInfo);
-		wcsncpy(notification->ProcessPath, nameInfo->Name.Buffer, nameInfo->Name.Length);
+		//wcsncpy(notification->ProcessPath, nameInfo->Name.Buffer, nameInfo->Name.Length);
+		//12345
+		WCHAR tmp[MAX_PATH] = { 0 };
+		wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
+		
+		GetNTLinkName(tmp,notification->ProcessPath);
+		DbgPrint("notification->ProcessPath is %ls", notification->ProcessPath);
 		FltReleaseFileNameInformation(nameInfo);
 		//wcsncpy(¬ification->ProcessPath,L"test",wcslen(L"test"));
 
@@ -747,8 +753,13 @@ FQDRVpScanFileInUserMode(
 		{
 			wcsncpy(g_LastDelFileName.Buffer, nameInfo->Name.Buffer, nameInfo->Name.MaximumLength);
 		}
+		//12345
+		//wcsncpy(notification->TargetPath, nameInfo->Name.Buffer, nameInfo->Name.MaximumLength);
+		WCHAR tmp3[MAX_PATH] = { 0 };
+		wcsncpy_s(tmp3, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
 
-		wcsncpy(notification->TargetPath, nameInfo->Name.Buffer, nameInfo->Name.MaximumLength);
+		GetNTLinkName(tmp3,notification->TargetPath);
+		DbgPrint("notification->TargetPath is %ls", notification->TargetPath);
 
 		FltReleaseFileNameInformation(nameInfo);
 
@@ -761,7 +772,12 @@ FQDRVpScanFileInUserMode(
 				DbgPrint("FltGetDestinationFileNameInformation is faild! 0x%x", status);
 				leave;
 			}
-			wcsncpy(notification->RePathName, pOutReNameinfo->Name.Buffer, pOutReNameinfo->Name.MaximumLength);
+			//wcsncpy(notification->RePathName, pOutReNameinfo->Name.Buffer, pOutReNameinfo->Name.MaximumLength);
+			//12345
+			WCHAR tmp1[MAX_PATH] = { 0 };
+			wcsncpy_s(tmp1, pOutReNameinfo->Name.Length, pOutReNameinfo->Name.Buffer, pOutReNameinfo->Name.Length);
+			GetNTLinkName(tmp1,notification->RePathName);
+			DbgPrint("notification->RePathName is %ls", notification->RePathName);
 
 			DbgPrint("重命名：%wZ\n", &pOutReNameinfo->Name);
 

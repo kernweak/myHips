@@ -7,6 +7,7 @@
 #include "commonFun.h"
 
 #define  MAXPATHLEN         512    
+#define MAX_PATH 256
 //UNICODE_STRINGz 转换为 CHAR*
 //输入 UNICODE_STRING 的指针，输出窄字符串，BUFFER 需要已经分配好空间
 VOID UnicodeToChar(PUNICODE_STRING dst, char *src)
@@ -130,4 +131,188 @@ BOOLEAN IsPatternMatch(const PWCHAR pExpression, const PWCHAR pName, BOOLEAN Ign
 
 		return FsRtlIsNameInExpression(&uExpression, &uName, IgnoreCase, NULL);
 	}
+}
+
+BOOLEAN IsShortNamePath(WCHAR * wszFileName)
+{
+	WCHAR *p = wszFileName;
+
+	while (*p != L'\0')
+	{
+		if (*p == L'~')
+		{
+			return TRUE;
+		}
+		p++;
+	}
+
+	return FALSE;
+}
+
+NTSTATUS QuerySymbolicLink(
+	IN PUNICODE_STRING SymbolicLinkName,
+	OUT PUNICODE_STRING LinkTarget
+)
+{
+	OBJECT_ATTRIBUTES	oa = { 0 };
+	NTSTATUS			status = 0;
+	HANDLE				handle = NULL;
+
+	InitializeObjectAttributes(
+		&oa,
+		SymbolicLinkName,
+		OBJ_CASE_INSENSITIVE,
+		0,
+		0);
+
+	status = ZwOpenSymbolicLinkObject(&handle, GENERIC_READ, &oa);
+	if (!NT_SUCCESS(status))
+	{
+		return status;
+	}
+
+	LinkTarget->MaximumLength = MAX_PATH * sizeof(WCHAR);
+	LinkTarget->Length = 0;
+	LinkTarget->Buffer = ExAllocatePoolWithTag(PagedPool, LinkTarget->MaximumLength, 'SOD');
+	if (!LinkTarget->Buffer)
+	{
+		ZwClose(handle);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	RtlZeroMemory(LinkTarget->Buffer, LinkTarget->MaximumLength);
+
+	status = ZwQuerySymbolicLinkObject(handle, LinkTarget, NULL);
+	ZwClose(handle);
+
+	if (!NT_SUCCESS(status))
+	{
+		ExFreePool(LinkTarget->Buffer);
+	}
+
+	return status;
+}
+
+NTSTATUS
+MyRtlVolumeDeviceToDosName(
+	IN PUNICODE_STRING DeviceName,
+	OUT PUNICODE_STRING DosName
+)
+
+/*++
+Routine Description:
+This routine returns a valid DOS path for the given device object.
+This caller of this routine must call ExFreePool on DosName->Buffer
+when it is no longer needed.
+Arguments:
+VolumeDeviceObject - Supplies the volume device object.
+DosName - Returns the DOS name for the volume
+Return Value:
+NTSTATUS
+--*/
+
+{
+	NTSTATUS				status = 0;
+	UNICODE_STRING			driveLetterName = { 0 };
+	WCHAR					driveLetterNameBuf[128] = { 0 };
+	WCHAR					c = L'\0';
+	WCHAR					DriLetter[3] = { 0 };
+	UNICODE_STRING			linkTarget = { 0 };
+
+	for (c = L'A'; c <= L'Z'; c++)
+	{
+		RtlInitEmptyUnicodeString(&driveLetterName, driveLetterNameBuf, sizeof(driveLetterNameBuf));
+		RtlAppendUnicodeToString(&driveLetterName, L"\\??\\");
+		DriLetter[0] = c;
+		DriLetter[1] = L':';
+		DriLetter[2] = 0;
+		RtlAppendUnicodeToString(&driveLetterName, DriLetter);
+		status = QuerySymbolicLink(&driveLetterName, &linkTarget);
+		if (!NT_SUCCESS(status))
+		{
+			continue;
+		}
+		if (RtlEqualUnicodeString(&linkTarget, DeviceName, TRUE))
+		{
+			ExFreePool(linkTarget.Buffer);
+			break;
+		}
+		ExFreePool(linkTarget.Buffer);
+	}
+	if (c <= L'Z')
+	{
+		DosName->Buffer = ExAllocatePoolWithTag(PagedPool, 3 * sizeof(WCHAR), 'SOD');
+		if (!DosName->Buffer)
+		{
+			return STATUS_INSUFFICIENT_RESOURCES;
+		}
+
+		DosName->MaximumLength = 6;
+		DosName->Length = 4;
+		*DosName->Buffer = c;
+		*(DosName->Buffer + 1) = ':';
+		*(DosName->Buffer + 2) = 0;
+
+		return STATUS_SUCCESS;
+	}
+
+	return status;
+}
+
+//c:\\windows\\hi.txt<--\\device\\harddiskvolume1\\windows\\hi.txt
+BOOLEAN NTAPI GetNTLinkName(IN WCHAR * wszNTName, OUT WCHAR * wszFileName)
+{
+	UNICODE_STRING		ustrFileName = { 0 };
+	UNICODE_STRING		ustrDosName = { 0 };
+	UNICODE_STRING		ustrDeviceName = { 0 };
+
+	WCHAR				*pPath = NULL;
+	ULONG				i = 0;
+	ULONG				ulSepNum = 0;
+
+
+	if (wszFileName == NULL ||
+		wszNTName == NULL ||
+		_wcsnicmp(wszNTName, L"\\device\\harddiskvolume", wcslen(L"\\device\\harddiskvolume")) != 0)
+	{
+		return FALSE;
+	}
+
+	ustrFileName.Buffer = wszFileName;
+	ustrFileName.Length = 0;
+	ustrFileName.MaximumLength = sizeof(WCHAR)*MAX_PATH;
+
+	while (wszNTName[i] != L'\0')
+	{
+
+		if (wszNTName[i] == L'\0')
+		{
+			break;
+		}
+		if (wszNTName[i] == L'\\')
+		{
+			ulSepNum++;
+		}
+		if (ulSepNum == 3)
+		{
+			wszNTName[i] = UNICODE_NULL;
+			pPath = &wszNTName[i + 1];
+			break;
+		}
+		i++;
+	}
+	if (pPath == NULL)
+	{
+		return FALSE;
+	}
+	RtlInitUnicodeString(&ustrDeviceName, wszNTName);
+	if (!NT_SUCCESS(MyRtlVolumeDeviceToDosName(&ustrDeviceName, &ustrDosName)))
+	{
+		return FALSE;
+	}
+	RtlCopyUnicodeString(&ustrFileName, &ustrDosName);
+	RtlAppendUnicodeToString(&ustrFileName, L"\\");
+	RtlAppendUnicodeToString(&ustrFileName, pPath);
+	ExFreePool(ustrDosName.Buffer);
+	return TRUE;
 }

@@ -254,7 +254,6 @@ ScannerWorker(
 		}
 
 		//memset(strPop,'\0',MAX_PATH*2);
-
 		if (notification->Operation == 2)
 		{
 			//sprintf(strPop,"进程:%S\r\n操作:%s\r\n目标:%S\r\n重名为:%S\r\n是否放行?",notification->ProcessPath,strOptions,notification->TargetPath,notification->RePathName);

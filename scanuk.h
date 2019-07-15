@@ -29,12 +29,13 @@ const PWSTR ScannerPortName = L"\\FQDRVPort";
 
 
 #define SCANNER_READ_BUFFER_SIZE   1024
-
+#define MAX_PATH 256
+#define  MAXPATHLEN         512    
 typedef struct _SCANNER_NOTIFICATION {
 
 	ULONG Operation;
-	WCHAR ProcessPath[MAX_PATH];
 	WCHAR TargetPath[MAX_PATH];
+	WCHAR ProcessPath[MAX_PATH];
 	WCHAR RePathName[MAX_PATH];
     
 } SCANNER_NOTIFICATION, *PSCANNER_NOTIFICATION;

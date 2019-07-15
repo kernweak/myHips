@@ -14,8 +14,8 @@ const PWSTR FQDRVPortName = L"\\FQDRVPort";
 #define  MAXPATHLEN         512    
 typedef struct _FQDRV_NOTIFICATION {
 	ULONG Operation;
-	WCHAR ProcessPath[MAX_PATH];
 	WCHAR TargetPath[MAX_PATH];
+	WCHAR ProcessPath[MAX_PATH];
 	WCHAR RePathName[MAX_PATH];
 } FQDRV_NOTIFICATION, *PFQDRV_NOTIFICATION;
 
