@@ -181,7 +181,7 @@ DriverEntry(
 			NULL,
 			FQDRVPortConnect,
 			FQDRVPortDisconnect,
-			MessageNotifyCallback,//作业，补充
+			MessageNotifyCallback,
 			1);
 		//
 		//  Free the security descriptor in all cases. It is not needed once
@@ -424,8 +424,8 @@ FQDRVPostCreate(
 
 	//DbgPrint(" tmp路径是%S\n", tmp);
 
-	scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
-
+	//scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+	scanFile=searchRule(tmp);
 	
 	FltReleaseFileNameInformation(nameInfo);
 
@@ -518,7 +518,8 @@ BOOLEAN isNeedWatchFile(PFLT_CALLBACK_DATA Data)
 	WCHAR tmp[256] = { 0 };
 	wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
 	//RtlInitUnicodeString(&ustrRule, L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.SYS");
-	Ret = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+	//Ret = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+	Ret=searchRule(tmp);
 	FltReleaseFileNameInformation(nameInfo);
 	return Ret;
 }
@@ -840,12 +841,13 @@ NTSTATUS MessageNotifyCallback(
 	Data *data = (Data*)InputBuffer;
 	WCHAR rulePath[MAX_PATH] = { 0 };
 	GetNtDeviceName(data->filename, rulePath);
-	KdPrint(("用户发来的信息是:%ls\n", rulePath));
+	DbgPrint("用户发来的信息是:%ls,GetNtDeviceName之后是%ls\n", data->filename,rulePath);
 
 
 	IOMonitorCommand command;
 	command = data->command;
 	WCHAR* p = rulePath;
+	//WCHAR* p = data->filename;
 	WCHAR cachePathTemp[MAX_PATH] = { 0 };
 	ULONG i = 0;
 	while (*p) {
@@ -988,7 +990,7 @@ ULONG AddPathList(PUNICODE_STRING  filename)
 }
 ULONG DeletePathList(PUNICODE_STRING  filename)
 {
-	filenames * new_filename, *current, *precurrent;
+	filenames  *current, *precurrent;
 	current = precurrent = m_pfilenames;
 	while (current != NULL)
 	{
@@ -1024,4 +1026,30 @@ ULONG DeletePathList(PUNICODE_STRING  filename)
 		}
 	}
 	return DELETE_PATH_NOT_EXISTS;
+}
+
+BOOLEAN searchRule(WCHAR *path)
+{
+	filenames *current;
+	current =  m_pfilenames;
+	WCHAR tmpPath[MAX_PATH]={0};
+	while (current != NULL)
+	{
+		__try {
+			WCHAR tmp[MAX_PATH] = { 0 };
+			wcsncpy_s(tmp, current->filename.Length, current->filename.Buffer, current->filename.Length);
+			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
+			if (IsPatternMatch(tmp, path, FALSE))
+			{
+				
+				return TRUE;
+			}
+			current = current->pNext;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return FALSE;
+		}
+	}
+	return FALSE;
 }

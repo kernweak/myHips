@@ -3,7 +3,7 @@
 #include <dontuse.h>
 #include <suppress.h>
 #include <strsafe.h>
-#include <Ntstrsafe.h>
+#include <Ntstrsafe.h >
 #include "FQDrv.h"
 #include "commonFun.h"
 

@@ -197,6 +197,6 @@ NTSTATUS MessageNotifyCallback(
 	OUT PULONG ReturnOutputBufferLength);
 ULONG AddPathList(PUNICODE_STRING  filename);
 ULONG DeletePathList(PUNICODE_STRING  filename);
-
+BOOLEAN searchRule(WCHAR *path);
 #endif /* __FQDRV_H__ */
 

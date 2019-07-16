@@ -492,7 +492,7 @@ void AddToDriver(WCHAR * filename)
 	Data *pData = NULL;
 	data.command = ADD_PATH;
 	wcscpy_s(data.filename, MAX_PATH, filename);
-
+	MessageBoxW(NULL, data.filename, L"AddToDriver", MB_OK);
 	pData = &data;
 	HRESULT hResult = SendToDriver(pData, sizeof(data));
 	if (IS_ERROR(hResult)) {
@@ -567,13 +567,14 @@ void CFileManager::OnBnClickedButtonAdd()
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	AddToDriver(p);
+
 }
 
 
 void CFileManager::OnBnClickedButtonDel()
 {
 	// TODO: Add your control notification handler code here
-	UpdateData(FALSE);
+	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	DeleteFromDriver(p);
 }

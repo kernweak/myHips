@@ -47,7 +47,7 @@ typedef struct filenames filenames;
 
 //发送数据结构体
 typedef struct Data {
-	int command;
+	unsigned long command;
 	wchar_t filename[MAX_PATH];
 
 }Data,*pData;
