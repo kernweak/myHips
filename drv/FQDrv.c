@@ -17,7 +17,8 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //
 //  Function prototypes
 //
-
+pFilenames m_pfilenames=NULL;
+ULONG isOpenFilter = 0;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -180,7 +181,7 @@ DriverEntry(
 			NULL,
 			FQDRVPortConnect,
 			FQDRVPortDisconnect,
-			NULL,//作业，补充
+			MessageNotifyCallback,//作业，补充
 			1);
 		//
 		//  Free the security descriptor in all cases. It is not needed once
@@ -821,3 +822,206 @@ FQDRVpScanFileInUserMode(
 	return status;
 }
 
+NTSTATUS MessageNotifyCallback(
+	IN PVOID PortCookie,
+	IN PVOID InputBuffer OPTIONAL,
+	IN ULONG InputBufferLength,
+	OUT PVOID OutputBuffer OPTIONAL,
+	IN ULONG OutputBufferLength,//用户可以接受的数据的最大长度.
+	OUT PULONG ReturnOutputBufferLength)
+{
+	NTSTATUS status = 0;
+	WCHAR buffer[MAX_PATH] = { 0 };
+	PAGED_CODE();
+
+	ULONG level = KeGetCurrentIrql();
+	RuleResult uResult = 0;
+	UNREFERENCED_PARAMETER(PortCookie);
+	Data *data = (Data*)InputBuffer;
+	WCHAR rulePath[MAX_PATH] = { 0 };
+	GetNtDeviceName(data->filename, rulePath);
+	KdPrint(("用户发来的信息是:%ls\n", rulePath));
+
+
+	IOMonitorCommand command;
+	command = data->command;
+	WCHAR* p = rulePath;
+	WCHAR cachePathTemp[MAX_PATH] = { 0 };
+	ULONG i = 0;
+	while (*p) {
+		cachePathTemp[i] = *p;
+		i++, p++;
+	}
+	KdPrint(("cachePathTemp是:%ls\n", cachePathTemp));
+	////cachePathTemp[i] = 0;
+	//
+	//申请内存构造字符串
+	UNICODE_STRING cachePath = { 0 };
+	ULONG ulLength = (i) * sizeof(WCHAR);
+	__try {
+		cachePath.Buffer = ExAllocatePoolWithTag(PagedPool, MAX_PATH * sizeof(WCHAR), 'PMET');
+		RtlZeroMemory(cachePath.Buffer, MAX_PATH * sizeof(WCHAR));
+		cachePath.Length = ulLength;
+		cachePath.MaximumLength = MAX_PATH*sizeof(WCHAR);
+		wcscpy_s(cachePath.Buffer, ulLength, cachePathTemp);
+		
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ExFreePool(cachePath.Buffer);
+		cachePath.Buffer = NULL;
+		cachePath.Length = cachePath.MaximumLength = 0;
+		return status;
+	}
+	DbgPrint("构建好的是%wZ\n", cachePath);
+	
+	switch (command)
+	{
+	case DEFAULT_PATH:
+		uResult=AddPathList(&cachePath);
+		break;
+	case ADD_PATH:
+		uResult=AddPathList(&cachePath);
+		break;
+	case DELETE_PATH:
+		uResult = DeletePathList(&cachePath);
+		break;
+	case CLOSE_PATH:
+		isOpenFilter = 0;
+		break;
+	case OPEN_PATH:
+		isOpenFilter = 1;
+		break;
+	}
+	
+	////释放内存
+	//ExFreePool(cachePath.Buffer);
+	//cachePath.Buffer = NULL;
+	//cachePath.Length = cachePath.MaximumLength = 0;
+	//
+	////打印用户发来的信息
+	//KdPrint(("用户发来的信息是:%ls\n", rulePath));
+	////返回用户一些信息.
+	//ReturnOutputBufferLength = sizeof(buffer);
+	//RtlCopyMemory(OutputBuffer, buffer, *ReturnOutputBufferLength);
+	//释放内存
+	
+	ExFreePool(cachePath.Buffer);
+	cachePath.Buffer = NULL;
+	cachePath.Length = cachePath.MaximumLength = 0;
+	//返回用户信息
+	switch (uResult)
+	{
+	case ADD_SUCCESS:
+		wcscpy_s(buffer, wcslen(L"ADD_SUCCESS")+1,L"ADD_SUCCESS");
+		break;
+	case ADD_PATH_ALREADY_EXISTS:
+		wcscpy_s(buffer, wcslen(L"ADD_PATH_ALREADY_EXISTS") + 1, L"ADD_PATH_ALREADY_EXISTS");
+		break;
+	case ADD_FAITH:
+		wcscpy_s(buffer, wcslen(L"ADD_FAITH") + 1, L"ADD_FAITH");
+		break;
+	case DELETE_SUCCESS:
+		wcscpy_s(buffer, wcslen(L"DELETE_SUCCESS") + 1, L"DELETE_SUCCESS");
+		break;
+	case DELETE_PATH_NOT_EXISTS:
+		wcscpy_s(buffer, wcslen(L"DELETE_PATH_NOT_EXISTS") + 1, L"DELETE_PATH_NOT_EXISTS");
+		break;
+	case DELETE_FAITH:
+		wcscpy_s(buffer, wcslen(L"DELETE_FAITH") + 1, L"DELETE_FAITH");
+		break;
+	default:
+		break;
+	}
+	ReturnOutputBufferLength = (wcslen(buffer) + 1) * sizeof(WCHAR);
+	RtlCopyMemory(OutputBuffer, buffer, (wcslen(buffer) + 1) * sizeof(WCHAR));
+	return status;
+}
+
+
+ULONG AddPathList(PUNICODE_STRING  filename)
+{
+	filenames * new_filename, *current, *precurrent;
+	new_filename = ExAllocatePool(NonPagedPool, sizeof(filenames));
+	new_filename->filename.Buffer = (PWSTR)ExAllocatePool(NonPagedPool, filename->MaximumLength);
+	new_filename->filename.MaximumLength = filename->MaximumLength;
+	__try {
+		RtlCopyUnicodeString(&new_filename->filename, filename);
+
+		new_filename->pNext = NULL;
+		if (NULL == m_pfilenames)              //头是空的，路径添加到头
+		{
+			m_pfilenames = new_filename;
+			DbgPrint("插入成功，头是空的，路径添加到头,插入的是%wZ\n", new_filename->filename);
+			return ADD_SUCCESS;
+		}
+		current = m_pfilenames;
+		while (current != NULL)
+		{
+			if (RtlEqualUnicodeString(&new_filename->filename, &current->filename, TRUE))
+				//链表中含有这个路径，返回
+			{
+				RtlFreeUnicodeString(&new_filename->filename);
+				ExFreePool(new_filename);
+				new_filename = NULL;
+				return ADD_PATH_ALREADY_EXISTS;
+			}
+			precurrent = current;
+			current = current->pNext;
+		}
+		//链表中没有这个路径，添加
+		current = m_pfilenames;
+		while (current->pNext != NULL)
+		{
+			current = current->pNext;
+		}
+		current->pNext = new_filename;
+		DbgPrint("插入成功,插入的是%wZ\n", current->filename);
+		return ADD_SUCCESS;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		RtlFreeUnicodeString(&new_filename->filename);
+		ExFreePool(new_filename);
+		new_filename = NULL;
+		return ADD_FAITH;
+	}
+}
+ULONG DeletePathList(PUNICODE_STRING  filename)
+{
+	filenames * new_filename, *current, *precurrent;
+	current = precurrent = m_pfilenames;
+	while (current != NULL)
+	{
+		__try {
+			if (RtlEqualUnicodeString(filename, &current->filename, TRUE))
+			{
+				//判断一下是否是头,如果是头，就让头指向第二个，删掉第一个
+				if (current == m_pfilenames)
+				{
+					DbgPrint("删除成功，删除的是头结点是%wZ\n", current->filename);
+					m_pfilenames = current->pNext;
+					RtlFreeUnicodeString(&current->filename);
+					
+					ExFreePool(current);
+					return DELETE_SUCCESS;
+				}
+				//如果不是头，删掉当前的
+				DbgPrint("删除成功，删除的不是头结点%wZ\n", current->filename);
+				precurrent->pNext = current->pNext;
+				current->pNext = NULL;
+				RtlFreeUnicodeString(&current->filename);
+				
+				ExFreePool(current);
+				
+				return DELETE_SUCCESS;
+			}
+			precurrent = current;
+			current = current->pNext;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return DELETE_FAITH;
+		}
+	}
+	return DELETE_PATH_NOT_EXISTS;
+}

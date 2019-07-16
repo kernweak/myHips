@@ -62,6 +62,7 @@ IMPLEMENT_DYNAMIC(CFileManager, CDialogEx)
 CFileManager::CFileManager(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_DIALOG_FILE_MANAGER, pParent)
 	, m_szPath(_T(""))
+	, m_rule(_T(""))
 {
 
 }
@@ -74,6 +75,7 @@ void CFileManager::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Text(pDX, IDC_EDIT_FILEPATH, m_szPath);
+	DDX_Text(pDX, IDC_EDIT_RULE, m_rule);
 }
 
 
@@ -81,6 +83,8 @@ BEGIN_MESSAGE_MAP(CFileManager, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_BROWSE, &CFileManager::OnBnClickedButtonBrowse)
 	ON_WM_DROPFILES()
 	ON_BN_CLICKED(IDC_BUTTON_FILEMON, &CFileManager::OnBnClickedButtonFilemon)
+	ON_BN_CLICKED(IDC_BUTTON_ADD, &CFileManager::OnBnClickedButtonAdd)
+	ON_BN_CLICKED(IDC_BUTTON_DEL, &CFileManager::OnBnClickedButtonDel)
 END_MESSAGE_MAP()
 
 
@@ -462,3 +466,114 @@ void CFileManager::OnBnClickedButtonFilemon()
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitFltUser, NULL, 0, NULL);
 }
 
+HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize)
+{
+	//通讯端口
+	HRESULT hResult = S_OK;
+	wchar_t OutBuffer[MAX_PATH] = { 0 };
+	DWORD bytesReturned = 0;
+	Data *data = (pData)lpInBuffer;
+	MessageBoxW(NULL,data->filename,(WCHAR*)data->command,MB_OK);
+	hResult = FilterSendMessage(g_port, lpInBuffer, dwInBufferSize, OutBuffer, sizeof(OutBuffer), &bytesReturned);
+	if (IS_ERROR(hResult)) {
+		return hResult;
+	}
+	OutputDebugString(L"从内核发来的信息是:");
+	OutputDebugString(OutBuffer);
+	OutputDebugString(L"\n");
+	return hResult;
+}
+
+
+
+void AddToDriver(WCHAR * filename)
+{
+	Data data;
+	Data *pData = NULL;
+	data.command = ADD_PATH;
+	wcscpy_s(data.filename, MAX_PATH, filename);
+
+	pData = &data;
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}
+void DeleteFromDriver(WCHAR * filename)
+{
+	Data data;
+	void *pData = NULL;
+	data.command = DELETE_PATH;
+	wcscpy_s(data.filename, MAX_PATH, filename);
+
+	pData = &data.command;
+	
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}
+void PauseDriver()
+{
+	Data data;
+	void *pData = NULL;
+
+	data.command = CLOSE_PATH;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}
+void RenewDriver()
+{
+	Data data;
+	void *pData = NULL;
+
+	data.command = OPEN_PATH;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+
+}
+
+
+
+void CFileManager::OnBnClickedButtonAdd()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(TRUE);
+	WCHAR * p = m_rule.GetBuffer();
+	AddToDriver(p);
+}
+
+
+void CFileManager::OnBnClickedButtonDel()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(FALSE);
+	WCHAR * p = m_rule.GetBuffer();
+	DeleteFromDriver(p);
+}

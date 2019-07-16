@@ -3,6 +3,7 @@
 #include <dontuse.h>
 #include <suppress.h>
 #include <strsafe.h>
+#include <Ntstrsafe.h>
 #include "FQDrv.h"
 #include "commonFun.h"
 
@@ -315,4 +316,78 @@ BOOLEAN NTAPI GetNTLinkName(IN WCHAR * wszNTName, OUT WCHAR * wszFileName)
 	RtlAppendUnicodeToString(&ustrFileName, pPath);
 	ExFreePool(ustrDosName.Buffer);
 	return TRUE;
+}
+
+BOOLEAN QueryVolumeName(WCHAR ch, WCHAR * name, USHORT size)
+{
+	WCHAR szVolume[7] = L"\\??\\C:";
+	UNICODE_STRING LinkName;
+	UNICODE_STRING VolName;
+	UNICODE_STRING ustrTarget;
+	NTSTATUS ntStatus = 0;
+
+	RtlInitUnicodeString(&LinkName, szVolume);
+
+	szVolume[4] = ch;
+	ustrTarget.Buffer = name;
+	ustrTarget.Length = 0;
+	ustrTarget.MaximumLength = size;
+
+	ntStatus = QuerySymbolicLink(&LinkName, &VolName);
+	if (NT_SUCCESS(ntStatus))
+	{
+		RtlCopyUnicodeString(&ustrTarget, &VolName);
+		ExFreePool(VolName.Buffer);
+	}
+	return NT_SUCCESS(ntStatus);
+
+}
+//\\??\\c:\\windows\\hi.txt-->\\device\\harddiskvolume1\\windows\\hi.txt
+BOOLEAN NTAPI GetNtDeviceName(IN WCHAR * filename, OUT WCHAR * ntname)
+{
+	UNICODE_STRING uVolName = { 0,0,0 };
+	WCHAR volName[MAX_PATH] = L"";
+	WCHAR tmpName[MAX_PATH] = L"";
+	WCHAR chVol = L'\0';
+	WCHAR * pPath = NULL;
+	int i = 0;
+
+
+	RtlStringCbCopyW(tmpName, MAX_PATH * sizeof(WCHAR), filename);
+
+	for (i = 1; i < MAX_PATH - 1; i++)
+	{
+		if (tmpName[i] == L':')
+		{
+			pPath = &tmpName[(i + 1) % MAX_PATH];
+			chVol = tmpName[i - 1];
+			break;
+		}
+	}
+
+	if (pPath == NULL)
+	{
+		return FALSE;
+	}
+
+	if (chVol == L'?')
+	{
+		uVolName.Length = 0;
+		uVolName.MaximumLength = MAX_PATH * sizeof(WCHAR);
+		uVolName.Buffer = ntname;
+		RtlAppendUnicodeToString(&uVolName, L"\\Device\\HarddiskVolume?");
+		RtlAppendUnicodeToString(&uVolName, pPath);
+		return TRUE;
+	}
+	else if (QueryVolumeName(chVol, volName, MAX_PATH * sizeof(WCHAR)))
+	{
+		uVolName.Length = 0;
+		uVolName.MaximumLength = MAX_PATH * sizeof(WCHAR);
+		uVolName.Buffer = ntname;
+		RtlAppendUnicodeToString(&uVolName, volName);
+		RtlAppendUnicodeToString(&uVolName, pPath);
+		return TRUE;
+	}
+
+	return FALSE;
 }

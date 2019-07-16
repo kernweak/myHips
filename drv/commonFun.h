@@ -15,3 +15,6 @@ NTSTATUS QuerySymbolicLink(
 	IN PUNICODE_STRING SymbolicLinkName,
 	OUT PUNICODE_STRING LinkTarget
 );
+
+BOOLEAN QueryVolumeName(WCHAR ch, WCHAR * name, USHORT size);
+BOOLEAN NTAPI GetNtDeviceName(IN WCHAR * filename, OUT WCHAR * ntname);

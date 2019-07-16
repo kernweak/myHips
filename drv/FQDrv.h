@@ -24,6 +24,37 @@ Environment:
 //  Global variables
 //
 ///////////////////////////////////////////////////////////////////////////
+#define MAX_PATH 256
+struct Data {             //应用层发来的 路径+操作命令 结构体
+    ULONG command;
+    WCHAR filename[MAX_PATH];
+
+};
+typedef struct Data Data;
+typedef enum _IOMONITOR_COMMAND {  //操作命令
+    DEFAULT_PATH,
+    ADD_PATH,
+    DELETE_PATH,
+    CLOSE_PATH,
+    OPEN_PATH,
+} IOMonitorCommand;
+
+typedef enum _result {  //操作命令
+	ADD_SUCCESS,
+	ADD_PATH_ALREADY_EXISTS,
+	ADD_FAITH,
+	DELETE_SUCCESS,
+	DELETE_PATH_NOT_EXISTS,
+	DELETE_FAITH,
+} RuleResult;
+
+typedef struct filenames {      //路径链表结点
+    UNICODE_STRING filename;
+    struct filenames* pNext;
+}filenames,*pFilenames;
+
+//void ModifyPathList(PUNICODE_STRING  filename);  //之前把添加和删除在一个函数实现的，这个路径存在就默认为删除命令，不存在就默认本次为添加命令（因为懒得解析结构体，只发一个路径），后来感觉还是不合适，就分开了
+
 
 
 typedef struct _FQDRV_DATA {
@@ -157,6 +188,15 @@ FQDRVPostSetInforMation(
 	__in_opt PVOID CompletionContext,
 	__in FLT_POST_OPERATION_FLAGS Flags
 );
+NTSTATUS MessageNotifyCallback(
+	IN PVOID PortCookie,
+	IN PVOID InputBuffer OPTIONAL,
+	IN ULONG InputBufferLength,
+	OUT PVOID OutputBuffer OPTIONAL,
+	IN ULONG OutputBufferLength,//用户可以接受的数据的最大长度.
+	OUT PULONG ReturnOutputBufferLength);
+ULONG AddPathList(PUNICODE_STRING  filename);
+ULONG DeletePathList(PUNICODE_STRING  filename);
 
 #endif /* __FQDRV_H__ */
 
