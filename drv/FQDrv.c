@@ -1038,10 +1038,10 @@ BOOLEAN searchRule(WCHAR *path)
 		__try {
 			WCHAR tmp[MAX_PATH] = { 0 };
 			wcsncpy_s(tmp, current->filename.Length, current->filename.Buffer, current->filename.Length);
+			ToUpperString(tmp);
 			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
-			if (IsPatternMatch(tmp, path, FALSE))
+			if (IsPatternMatch(tmp, path, TRUE))
 			{
-				
 				return TRUE;
 			}
 			current = current->pNext;

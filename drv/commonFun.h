@@ -18,3 +18,4 @@ NTSTATUS QuerySymbolicLink(
 
 BOOLEAN QueryVolumeName(WCHAR ch, WCHAR * name, USHORT size);
 BOOLEAN NTAPI GetNtDeviceName(IN WCHAR * filename, OUT WCHAR * ntname);
+VOID ToUpperString(WCHAR* str);

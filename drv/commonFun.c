@@ -391,3 +391,19 @@ BOOLEAN NTAPI GetNtDeviceName(IN WCHAR * filename, OUT WCHAR * ntname)
 
 	return FALSE;
 }
+WCHAR  my_towupper(WCHAR wch)
+{
+	if (wch >= L'a' && wch <= L'z')
+	{
+		return wch - L'a' + L'A';
+	}
+	return wch;
+}
+
+VOID ToUpperString(WCHAR* str)
+{
+	for (int i = 0; str[i]; i++)
+	{
+		str[i] = my_towupper(str[i]);
+	}
+}

@@ -473,11 +473,11 @@ HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize)
 	wchar_t OutBuffer[MAX_PATH] = { 0 };
 	DWORD bytesReturned = 0;
 	Data *data = (pData)lpInBuffer;
-	MessageBoxW(NULL,data->filename,(WCHAR*)data->command,MB_OK);
 	hResult = FilterSendMessage(g_port, lpInBuffer, dwInBufferSize, OutBuffer, sizeof(OutBuffer), &bytesReturned);
 	if (IS_ERROR(hResult)) {
 		return hResult;
 	}
+	MessageBoxW(NULL, OutBuffer, L"返回结果", MB_OK);
 	OutputDebugString(L"从内核发来的信息是:");
 	OutputDebugString(OutBuffer);
 	OutputDebugString(L"\n");
@@ -492,7 +492,6 @@ void AddToDriver(WCHAR * filename)
 	Data *pData = NULL;
 	data.command = ADD_PATH;
 	wcscpy_s(data.filename, MAX_PATH, filename);
-	MessageBoxW(NULL, data.filename, L"AddToDriver", MB_OK);
 	pData = &data;
 	HRESULT hResult = SendToDriver(pData, sizeof(data));
 	if (IS_ERROR(hResult)) {
