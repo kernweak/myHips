@@ -7,6 +7,16 @@
 #include "FQHIPSDlg.h"
 #include "afxdialogex.h"
 
+
+#include <windows.h>
+#include <winioctl.h>
+#include <winsvc.h>
+#include <stdio.h>
+#include <conio.h>
+#define DRIVER_NAME L"FQDrv"
+#define DRIVER_PATH L".\\FQDrv.sys"
+#define DRIVER_ALTITUDE	 L"265000" //有同学反馈，他这里没有使用UNICODE编码，导致安装不生效
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -51,6 +61,7 @@ END_MESSAGE_MAP()
 
 CFQHIPSDlg::CFQHIPSDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_FQHIPS_DIALOG, pParent)
+	, m_drvState(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDI_FQICON);
 }
@@ -59,6 +70,7 @@ void CFQHIPSDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_TAB_MJFUNCTON, m_tabCtrl);
+	DDX_Text(pDX, IDC_EDIT1, m_drvState);
 }
 
 BEGIN_MESSAGE_MAP(CFQHIPSDlg, CDialogEx)
@@ -70,6 +82,10 @@ BEGIN_MESSAGE_MAP(CFQHIPSDlg, CDialogEx)
 	ON_MESSAGE(WM_ICON_NOTIFY, OnTrayNotification)
 	ON_COMMAND(ID_TRAY_RESTORE, &CFQHIPSDlg::OnTrayRestore)
 	ON_COMMAND(ID_TRAY_EXIT, &CFQHIPSDlg::OnTrayExit)
+	ON_BN_CLICKED(IDC_BUTTON_STARTDRV, &CFQHIPSDlg::OnBnClickedButtonStartdrv)
+	ON_BN_CLICKED(IDC_BUTTON_PAUSEDRV, &CFQHIPSDlg::OnBnClickedButtonPausedrv)
+	ON_BN_CLICKED(IDC_BUTTON_INSTALLDRV, &CFQHIPSDlg::OnBnClickedButtonInstalldrv)
+	ON_BN_CLICKED(IDC_BUTTON_UNINSTALLDRV, &CFQHIPSDlg::OnBnClickedButtonUninstalldrv)
 END_MESSAGE_MAP()
 
 
@@ -186,7 +202,21 @@ BOOL CFQHIPSDlg::OnInitDialog()
 	PNOTIFYICONDATA m_ptnid = &m_tnid;
 	::Shell_NotifyIcon(NIM_ADD, m_ptnid);//增加图标到系统盘
 
-
+	bool ret1=InstallDriver(DRIVER_NAME, DRIVER_PATH, DRIVER_ALTITUDE);
+	if (!ret1)
+	{
+		MessageBoxW(NULL, L"安装失败，请检查文件是否完整", MB_OK);
+	}
+	bool ret = InstallDriver(DRIVER_NAME, DRIVER_PATH, DRIVER_ALTITUDE);
+	if (!ret)
+	{
+		m_drvState = L"安装驱动失败";
+	}
+	else
+	{
+		m_drvState = L"安装驱动成功";
+	}
+	UpdateData(FALSE);
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -316,4 +346,295 @@ void CFQHIPSDlg::OnTrayExit()
 {
 	OnClose();
 	// TODO: 在此添加命令处理程序代码
+}
+
+
+BOOL InstallDriver(const WCHAR* lpszDriverName, const WCHAR* lpszDriverPath, const WCHAR* lpszAltitude)
+{
+	WCHAR    szTempStr[MAX_PATH];
+	HKEY    hKey;
+	DWORD    dwData;
+	WCHAR    szDriverImagePath[MAX_PATH];
+
+	if (NULL == lpszDriverName || NULL == lpszDriverPath)
+	{
+		return FALSE;
+	}
+	//得到完整的驱动路径
+	GetFullPathName(lpszDriverPath, MAX_PATH, szDriverImagePath, NULL);
+
+	SC_HANDLE hServiceMgr = NULL;// SCM管理器的句柄
+	SC_HANDLE hService = NULL;// NT驱动程序的服务句柄
+
+	//打开服务控制管理器
+	hServiceMgr = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+	if (hServiceMgr == NULL)
+	{
+		// OpenSCManager失败
+		CloseServiceHandle(hServiceMgr);
+		return FALSE;
+	}
+	MessageBoxW(NULL, szDriverImagePath, szDriverImagePath, MB_OK);
+	// OpenSCManager成功  
+
+	//创建驱动所对应的服务
+	hService = CreateService(hServiceMgr,
+		lpszDriverName,             // 驱动程序的在注册表中的名字
+		lpszDriverName,             // 注册表驱动程序的DisplayName 值
+		SERVICE_ALL_ACCESS,         // 加载驱动程序的访问权限
+		SERVICE_FILE_SYSTEM_DRIVER, // 表示加载的服务是文件系统驱动程序
+		SERVICE_DEMAND_START,       // 注册表驱动程序的Start 值
+		SERVICE_ERROR_NORMAL,       // 注册表驱动程序的ErrorControl 值
+		szDriverImagePath,          // 注册表驱动程序的ImagePath 值
+		L"FQDrv Content Montior",// 注册表驱动程序的Group 值
+		NULL,
+		L"FltMgr",                   // 注册表驱动程序的DependOnService 值
+		NULL,
+		NULL);
+
+	if (hService == NULL)
+	{
+		if (GetLastError() == ERROR_SERVICE_EXISTS)
+		{
+			//服务创建失败，是由于服务已经创立过
+			CloseServiceHandle(hService);       // 服务句柄
+			CloseServiceHandle(hServiceMgr);    // SCM句柄
+			return TRUE;
+		}
+		else
+		{
+			CloseServiceHandle(hService);       // 服务句柄
+			CloseServiceHandle(hServiceMgr);    // SCM句柄
+			return FALSE;
+		}
+	}
+	CloseServiceHandle(hService);       // 服务句柄
+	CloseServiceHandle(hServiceMgr);    // SCM句柄
+
+	//-------------------------------------------------------------------------------------------------------
+	// SYSTEM\\CurrentControlSet\\Services\\DriverName\\Instances子健下的键值项 
+	//-------------------------------------------------------------------------------------------------------
+	wcscpy_s(szTempStr,L"SYSTEM\\CurrentControlSet\\Services\\");
+	wcscat_s(szTempStr, lpszDriverName);
+	wcscat_s(szTempStr, L"\\Instances");
+	if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, szTempStr, 0, L"", REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, (LPDWORD)&dwData) != ERROR_SUCCESS)
+	{
+		return FALSE;
+	}
+	// 注册表驱动程序的DefaultInstance 值 
+	wsprintf(szTempStr, L"\%ls Instance", lpszDriverName);
+	MessageBoxW(NULL, szTempStr, szTempStr, MB_OK);
+	//wcscpy_s(szTempStr, lpszDriverName);
+	//wcscat_s(szTempStr, L" Instance");
+	if (RegSetValueEx(hKey, L"DefaultInstance", 0, REG_SZ, (CONST BYTE*)szTempStr, (DWORD)(wcslen(szTempStr)*sizeof(WCHAR))) != ERROR_SUCCESS)
+	{
+		return FALSE;
+	}
+	RegFlushKey(hKey);//刷新注册表
+	RegCloseKey(hKey);
+
+
+	//-------------------------------------------------------------------------------------------------------
+	// SYSTEM\\CurrentControlSet\\Services\\DriverName\\Instances\\DriverName Instance子健下的键值项 
+	//-------------------------------------------------------------------------------------------------------
+	wcscpy_s(szTempStr, L"SYSTEM\\CurrentControlSet\\Services\\");
+	wcscat_s(szTempStr, lpszDriverName);
+	wcscat_s(szTempStr, L"\\Instances\\");
+	wcscat_s(szTempStr, lpszDriverName);
+	wcscat_s(szTempStr, L" Instance");
+	if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, szTempStr, 0, L"", REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, (LPDWORD)&dwData) != ERROR_SUCCESS)
+	{
+		return FALSE;
+	}
+	// 注册表驱动程序的Altitude 值
+	wcscpy_s(szTempStr, lpszAltitude);
+	if (RegSetValueEx(hKey, L"Altitude", 0, REG_SZ, (CONST BYTE*)szTempStr, (DWORD)(wcslen(szTempStr)*sizeof(WCHAR))) != ERROR_SUCCESS)
+	{
+		return FALSE;
+	}
+	// 注册表驱动程序的Flags 值
+	dwData = 0x0;
+	if (RegSetValueEx(hKey, L"Flags", 0, REG_DWORD, (CONST BYTE*)&dwData, sizeof(DWORD)) != ERROR_SUCCESS)
+	{
+		return FALSE;
+	}
+	RegFlushKey(hKey);//刷新注册表
+	RegCloseKey(hKey);
+
+	return TRUE;
+}
+
+
+BOOL StartDriver(const WCHAR* lpszDriverName)
+{
+	SC_HANDLE schManager;
+	SC_HANDLE schService;
+	SERVICE_STATUS svcStatus;
+
+	if (NULL == lpszDriverName)
+	{
+		return FALSE;
+	}
+
+	schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+	if (NULL == schManager)
+	{
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+	schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
+	if (NULL == schService)
+	{
+		CloseServiceHandle(schService);
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+
+	if (!StartService(schService, 0, NULL))
+	{
+		CloseServiceHandle(schService);
+		CloseServiceHandle(schManager);
+		int i = GetLastError();
+		CString STemp;
+		STemp.Format(_T("%d"), i);
+		MessageBox(NULL,STemp,STemp,MB_OK);
+		if (GetLastError() == ERROR_SERVICE_ALREADY_RUNNING)
+		{
+			// 服务已经开启
+			return TRUE;
+		}
+		return FALSE;
+	}
+
+	CloseServiceHandle(schService);
+	CloseServiceHandle(schManager);
+
+	return TRUE;
+}
+
+BOOL StopDriver(const WCHAR* lpszDriverName)
+{
+	SC_HANDLE        schManager;
+	SC_HANDLE        schService;
+	SERVICE_STATUS    svcStatus;
+	bool            bStopped = false;
+
+	schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+	if (NULL == schManager)
+	{
+		return FALSE;
+	}
+	schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
+	if (NULL == schService)
+	{
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+	if (!ControlService(schService, SERVICE_CONTROL_STOP, &svcStatus) && (svcStatus.dwCurrentState != SERVICE_STOPPED))
+	{
+		CloseServiceHandle(schService);
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+
+	CloseServiceHandle(schService);
+	CloseServiceHandle(schManager);
+
+	return TRUE;
+}
+
+BOOL DeleteDriver(const WCHAR* lpszDriverName)
+{
+	SC_HANDLE        schManager;
+	SC_HANDLE        schService;
+	SERVICE_STATUS    svcStatus;
+
+	schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+	if (NULL == schManager)
+	{
+		return FALSE;
+	}
+	schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
+	if (NULL == schService)
+	{
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+	ControlService(schService, SERVICE_CONTROL_STOP, &svcStatus);
+	if (!DeleteService(schService))
+	{
+		CloseServiceHandle(schService);
+		CloseServiceHandle(schManager);
+		return FALSE;
+	}
+	CloseServiceHandle(schService);
+	CloseServiceHandle(schManager);
+
+	return TRUE;
+}
+
+
+void CFQHIPSDlg::OnBnClickedButtonStartdrv()
+{
+	// TODO: Add your control notification handler code here
+	bool ret = StartDriver(DRIVER_NAME);
+	if (!ret)
+	{
+		m_drvState = L"开启驱动失败";
+	}
+	else
+	{
+		m_drvState = L"开启驱动成功";
+	}	
+	UpdateData(FALSE);
+}
+
+
+
+
+void CFQHIPSDlg::OnBnClickedButtonPausedrv()
+{
+	// TODO: Add your control notification handler code here
+	bool ret=StopDriver(DRIVER_NAME);
+	if (!ret)
+	{
+		m_drvState = L"暂停驱动失败";
+	}
+	else
+	{
+		m_drvState = L"暂停驱动成功";
+	}
+	UpdateData(FALSE);
+}
+
+
+void CFQHIPSDlg::OnBnClickedButtonInstalldrv()
+{
+	// TODO: Add your control notification handler code here
+	bool ret = InstallDriver(DRIVER_NAME, DRIVER_PATH, DRIVER_ALTITUDE);
+	if (!ret)
+	{
+		m_drvState = L"安装驱动失败";
+	}
+	else
+	{
+		m_drvState = L"安装驱动成功";
+	}
+	UpdateData(FALSE);
+}
+
+
+void CFQHIPSDlg::OnBnClickedButtonUninstalldrv()
+{
+	// TODO: Add your control notification handler code here
+	bool ret=DeleteDriver(DRIVER_NAME);
+	if (!ret)
+	{
+		m_drvState = L"卸载驱动失败";
+	}
+	else
+	{
+		m_drvState = L"卸载驱动成功";
+	}
+	UpdateData(FALSE);
 }

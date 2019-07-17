@@ -72,4 +72,14 @@ public:
 
 	afx_msg void OnTrayRestore();
 	afx_msg void OnTrayExit();
+	afx_msg void OnBnClickedButtonStartdrv();
+	afx_msg void OnBnClickedButtonPausedrv();
+	afx_msg void OnBnClickedButtonInstalldrv();
+	afx_msg void OnBnClickedButtonUninstalldrv();
+	CString m_drvState;
 };
+
+BOOL InstallDriver(const WCHAR* lpszDriverName, const WCHAR* lpszDriverPath, const WCHAR* lpszAltitude);
+BOOL StartDriver(const WCHAR* lpszDriverName);
+BOOL StopDriver(const WCHAR* lpszDriverName);
+BOOL DeleteDriver(const WCHAR* lpszDriverName);
