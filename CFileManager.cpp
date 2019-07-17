@@ -85,6 +85,8 @@ BEGIN_MESSAGE_MAP(CFileManager, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_FILEMON, &CFileManager::OnBnClickedButtonFilemon)
 	ON_BN_CLICKED(IDC_BUTTON_ADD, &CFileManager::OnBnClickedButtonAdd)
 	ON_BN_CLICKED(IDC_BUTTON_DEL, &CFileManager::OnBnClickedButtonDel)
+	ON_BN_CLICKED(IDC_BUTTON_PAUSE, &CFileManager::OnBnClickedButtonPause)
+	ON_BN_CLICKED(IDC_BUTTON_RESTART, &CFileManager::OnBnClickedButtonRestart)
 END_MESSAGE_MAP()
 
 
@@ -576,4 +578,18 @@ void CFileManager::OnBnClickedButtonDel()
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	DeleteFromDriver(p);
+}
+
+
+void CFileManager::OnBnClickedButtonPause()
+{
+	PauseDriver();
+	// TODO: Add your control notification handler code here
+}
+
+
+void CFileManager::OnBnClickedButtonRestart()
+{
+	// TODO: Add your control notification handler code here
+	RenewDriver();
 }

@@ -18,7 +18,7 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //  Function prototypes
 //
 pFilenames m_pfilenames=NULL;
-ULONG isOpenFilter = 0;
+ULONG isOpenFilter = 1;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -373,94 +373,87 @@ FQDRVPostCreate(
 	//
 	//  If this create was failing anyway, don't bother scanning now.
 	//
+	if (isOpenFilter) {
+		if (!NT_SUCCESS(Data->IoStatus.Status) ||//打开不成功
+			(STATUS_REPARSE == Data->IoStatus.Status)) {//文件是重定向的
 
-	if (!NT_SUCCESS(Data->IoStatus.Status) ||//打开不成功
-		(STATUS_REPARSE == Data->IoStatus.Status)) {//文件是重定向的
-
-		return FLT_POSTOP_FINISHED_PROCESSING;
-	}
-
-	options= Data->Iopb->Parameters.Create.Options;
-	//下面判断
-	if (FlagOn(options, FILE_DIRECTORY_FILE) ||//是目录
-		FlagOn(FltObjects->FileObject->Flags, FO_VOLUME_OPEN) || //文件对象表示卷打开请求。
-		FlagOn(Data->Flags, SL_OPEN_PAGING_FILE))//打开标识
-	{
-		return FLT_POSTOP_FINISHED_PROCESSING;
-	}
-	ulDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0xFF;
-	if (ulDisposition == FILE_CREATE || ulDisposition == FILE_OVERWRITE || ulDisposition == FILE_OVERWRITE_IF)
-	{
-		isPopWindow = TRUE;
-	}
-
-	//
-	//  Check if we are interested in this file.
-	//
-
-	status = FltGetFileNameInformation(Data,//拿到文件名字
-		FLT_FILE_NAME_NORMALIZED |
-		FLT_FILE_NAME_QUERY_DEFAULT,
-		&nameInfo);
-
-	if (!NT_SUCCESS(status)) {
-
-		return FLT_POSTOP_FINISHED_PROCESSING;
-	}
-
-	FltParseFileNameInformation(nameInfo);//w文件路径解析，扩展名，路径，等
-
-	//scanFile = FQDRVpCheckExtension(&nameInfo->Extension);//看扩展名是不是需要的
-
-
-	
-	//185519
-	//这里先写死，后面进行链表循环判断
-	//RtlInitUnicodeString(&ustrRule, L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*");
-	//scanFile = IsPatternMatch(&ustrRule, &nameInfo->Name, TRUE);
-	//RtlInitUnicodeString(&ustrRule, L"C:\Windows\\System32\\drivers\\*.*");
-	WCHAR tmp[256] = { 0 };
-	wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
-
-	//DbgPrint(" tmp路径是%S\n", tmp);
-
-	//scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
-	scanFile=searchRule(tmp);
-	
-	FltReleaseFileNameInformation(nameInfo);
-
-	if (!scanFile) {
-		return FLT_POSTOP_FINISHED_PROCESSING;
-	}
-	if (isPopWindow)
-	{
-		FQDRVpScanFileInUserMode(
-			FltObjects->Instance,
-			FltObjects->FileObject,
-			Data,
-			1,//1是创建
-			&safeToOpen
-		);
-
-		if (!safeToOpen) {
-
-
-			DbgPrint("拒绝创建操作\n");
-
-			//就算拒绝了 也会创建一个空文件 这里我们删除
-			fdi.DeleteFile = TRUE;
-			FltSetInformationFile(FltObjects->Instance, FltObjects->FileObject, &fdi, sizeof(FILE_DISPOSITION_INFORMATION), FileDispositionInformation);
-			FltCancelFileOpen(FltObjects->Instance, FltObjects->FileObject);
-
-			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-			Data->IoStatus.Information = 0;
-
-			returnStatus = FLT_POSTOP_FINISHED_PROCESSING;
-
+			return FLT_POSTOP_FINISHED_PROCESSING;
 		}
-	}
 
-	
+		options = Data->Iopb->Parameters.Create.Options;
+		//下面判断
+		if (FlagOn(options, FILE_DIRECTORY_FILE) ||//是目录
+			FlagOn(FltObjects->FileObject->Flags, FO_VOLUME_OPEN) || //文件对象表示卷打开请求。
+			FlagOn(Data->Flags, SL_OPEN_PAGING_FILE))//打开标识
+		{
+			return FLT_POSTOP_FINISHED_PROCESSING;
+		}
+		ulDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0xFF;
+		if (ulDisposition == FILE_CREATE || ulDisposition == FILE_OVERWRITE || ulDisposition == FILE_OVERWRITE_IF)
+		{
+			isPopWindow = TRUE;
+		}
+
+		//
+		//  Check if we are interested in this file.
+		//
+
+		status = FltGetFileNameInformation(Data,//拿到文件名字
+			FLT_FILE_NAME_NORMALIZED |
+			FLT_FILE_NAME_QUERY_DEFAULT,
+			&nameInfo);
+
+		if (!NT_SUCCESS(status)) {
+
+			return FLT_POSTOP_FINISHED_PROCESSING;
+		}
+
+		FltParseFileNameInformation(nameInfo);//w文件路径解析，扩展名，路径，等
+
+		//scanFile = FQDRVpCheckExtension(&nameInfo->Extension);//看扩展名是不是需要的
+
+		WCHAR tmp[256] = { 0 };
+		wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
+
+		//DbgPrint(" tmp路径是%S\n", tmp);
+
+		//scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+		scanFile = searchRule(tmp);
+
+		FltReleaseFileNameInformation(nameInfo);
+
+		if (!scanFile) {
+			return FLT_POSTOP_FINISHED_PROCESSING;
+		}
+		if (isPopWindow)
+		{
+			FQDRVpScanFileInUserMode(
+				FltObjects->Instance,
+				FltObjects->FileObject,
+				Data,
+				1,//1是创建
+				&safeToOpen
+			);
+
+			if (!safeToOpen) {
+
+
+				DbgPrint("拒绝创建操作\n");
+
+				//就算拒绝了 也会创建一个空文件 这里我们删除
+				fdi.DeleteFile = TRUE;
+				FltSetInformationFile(FltObjects->Instance, FltObjects->FileObject, &fdi, sizeof(FILE_DISPOSITION_INFORMATION), FileDispositionInformation);
+				FltCancelFileOpen(FltObjects->Instance, FltObjects->FileObject);
+
+				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+				Data->IoStatus.Information = 0;
+
+				returnStatus = FLT_POSTOP_FINISHED_PROCESSING;
+
+			}
+		}
+
+	}
 	return returnStatus;
 }
 
@@ -566,61 +559,63 @@ FQDRVPreSetInforMation(
 	UNREFERENCED_PARAMETER(Data);
 	UNREFERENCED_PARAMETER(FltObjects);
 	UNREFERENCED_PARAMETER(CompletionContext);
-	//UNREFERENCED_PARAMETER(FltObjects);
-	if (FQDRVData.ClientPort == NULL)
-	{
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;
-	}
-	if (FQDRVData.UserProcess == PsGetCurrentProcess())
-	{
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;
-	}
-	/*
-			lpIrpStack->Parameters.SetFile.FileInformationClass == FileRenameInformation ||//重命名
-			lpIrpStack->Parameters.SetFile.FileInformationClass == FileBasicInformation || //设置基础信息
-			lpIrpStack->Parameters.SetFile.FileInformationClass == FileAllocationInformation ||
-			lpIrpStack->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||//设置大小
-			lpIrpStack->Parameters.SetFile.FileInformationClass == FileDispositionInformation)//删除
-	*/
-	if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation ||
-		Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)
-	{
-		switch (Data->Iopb->Parameters.SetFileInformation.FileInformationClass)
-		{
-		case FileRenameInformation:
-			Options = 2;
-			break;
-		case FileDispositionInformation:
-			Options = 3;
-			break;
-		default:
-			Options = 0;//爆炸啦
-			break;
-		}
-		//判断是不是我们要监控的
-		if (!isNeedWatchFile(Data))
+	if (isOpenFilter) {
+		//UNREFERENCED_PARAMETER(FltObjects);
+		if (FQDRVData.ClientPort == NULL)
 		{
 			return FLT_PREOP_SUCCESS_NO_CALLBACK;
 		}
-		if (Options == 2)
+		if (FQDRVData.UserProcess == PsGetCurrentProcess())
 		{
-			if (isRecycle(Data, FltObjects))
+			return FLT_PREOP_SUCCESS_NO_CALLBACK;
+		}
+		/*
+				lpIrpStack->Parameters.SetFile.FileInformationClass == FileRenameInformation ||//重命名
+				lpIrpStack->Parameters.SetFile.FileInformationClass == FileBasicInformation || //设置基础信息
+				lpIrpStack->Parameters.SetFile.FileInformationClass == FileAllocationInformation ||
+				lpIrpStack->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||//设置大小
+				lpIrpStack->Parameters.SetFile.FileInformationClass == FileDispositionInformation)//删除
+		*/
+		if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation ||
+			Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)
+		{
+			switch (Data->Iopb->Parameters.SetFileInformation.FileInformationClass)
+			{
+			case FileRenameInformation:
+				Options = 2;
+				break;
+			case FileDispositionInformation:
+				Options = 3;
+				break;
+			default:
+				Options = 0;//爆炸啦
+				break;
+			}
+			//判断是不是我们要监控的
+			if (!isNeedWatchFile(Data))
 			{
 				return FLT_PREOP_SUCCESS_NO_CALLBACK;
 			}
-		}
-		//进程路径,操作类型,原路径,重命名后路径
-		FQDRVpScanFileInUserMode(FltObjects->Instance, FltObjects->FileObject, Data, Options, &isAllow);
-		if (!isAllow)
-		{
-			DbgPrint("ReName in PreSetInforMation被拒绝 !\n");
-			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-			Data->IoStatus.Information = 0;
-			status = FLT_PREOP_COMPLETE;
-		}
-		else
-		{
-			status = FLT_PREOP_SUCCESS_NO_CALLBACK;
+			if (Options == 2)
+			{
+				if (isRecycle(Data, FltObjects))
+				{
+					return FLT_PREOP_SUCCESS_NO_CALLBACK;
+				}
+			}
+			//进程路径,操作类型,原路径,重命名后路径
+			FQDRVpScanFileInUserMode(FltObjects->Instance, FltObjects->FileObject, Data, Options, &isAllow);
+			if (!isAllow)
+			{
+				DbgPrint("ReName in PreSetInforMation被拒绝 !\n");
+				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+				Data->IoStatus.Information = 0;
+				status = FLT_PREOP_COMPLETE;
+			}
+			else
+			{
+				status = FLT_PREOP_SUCCESS_NO_CALLBACK;
+			}
 		}
 	}
 	return status;
@@ -889,9 +884,11 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case CLOSE_PATH:
 		isOpenFilter = 0;
+		uResult = PAUSE_FILEMON;
 		break;
 	case OPEN_PATH:
 		isOpenFilter = 1;
+		uResult = RESTART_FILEMON;
 		break;
 	}
 	
@@ -930,6 +927,12 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case DELETE_FAITH:
 		wcscpy_s(buffer, wcslen(L"DELETE_FAITH") + 1, L"DELETE_FAITH");
+		break;
+	case PAUSE_FILEMON:
+		wcscpy_s(buffer, wcslen(L"PAUSE_FILEMON") + 1, L"PAUSE_FILEMON");
+		break;
+	case RESTART_FILEMON:
+		wcscpy_s(buffer, wcslen(L"RESTART_FILEMON") + 1, L"RESTART_FILEMON");
 		break;
 	default:
 		break;

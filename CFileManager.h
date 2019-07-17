@@ -28,6 +28,8 @@ public:
 	CString m_rule;
 	afx_msg void OnBnClickedButtonAdd();
 	afx_msg void OnBnClickedButtonDel();
+	afx_msg void OnBnClickedButtonPause();
+	afx_msg void OnBnClickedButtonRestart();
 };
 
 const PWSTR FQDRVPortName = L"\\FQDRVPort";
@@ -72,7 +74,7 @@ HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize);
 //控制驱动路径
 void AddToDriver(WCHAR * filename);
 void DeleteFromDriver(WCHAR * filename);
-//void PauseDriver();
-//void RenewDriver();
+void PauseDriver();
+void RenewDriver();
 
 
