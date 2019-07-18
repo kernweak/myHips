@@ -26,4 +26,8 @@ public:
 	void SetText(LPCTSTR str);
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnBnClickedCancel();
+	CString m_szTime;
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	virtual BOOL OnInitDialog();
+	int m_lefttime;
 };
