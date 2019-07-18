@@ -1,0 +1,3 @@
+C:\DriverTest\*.*
+C:\Doc\*.*
+C:\AppServ\*.*

@@ -33,7 +33,7 @@
 
 
 HANDLE g_port = 0;
-
+pFileRule g_fileRule = NULL;
 typedef struct _SCANNER_THREAD_CONTEXT {
 
 	HANDLE Port;
@@ -63,6 +63,7 @@ CFileManager::CFileManager(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_DIALOG_FILE_MANAGER, pParent)
 	, m_szPath(_T(""))
 	, m_rule(_T(""))
+	, m_ruleState(_T(""))
 {
 
 }
@@ -76,6 +77,7 @@ void CFileManager::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Text(pDX, IDC_EDIT_FILEPATH, m_szPath);
 	DDX_Text(pDX, IDC_EDIT_RULE, m_rule);
+	DDX_Text(pDX, IDC_EDIT1, m_ruleState);
 }
 
 
@@ -466,6 +468,11 @@ void CFileManager::OnBnClickedButtonFilemon()
 {
 	// TODO: Add your control notification handler code here
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitFltUser, NULL, 0, NULL);
+	bool ret=addDefaultRule();
+	//if(!ret){
+	//	MessageBoxW(NULL, L"读取文件失败", MB_OK);
+	//
+	//}
 }
 
 HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize)
@@ -479,7 +486,7 @@ HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize)
 	if (IS_ERROR(hResult)) {
 		return hResult;
 	}
-	MessageBoxW(NULL, OutBuffer, L"返回结果", MB_OK);
+	//MessageBoxW(NULL, OutBuffer, L"返回结果", MB_OK);
 	OutputDebugString(L"从内核发来的信息是:");
 	OutputDebugString(OutBuffer);
 	OutputDebugString(L"\n");
@@ -555,6 +562,7 @@ void RenewDriver()
 	}
 	else
 	{
+
 		OutputDebugString(L"FilterSendMessage is ok!\n");
 	}
 
@@ -568,7 +576,22 @@ void CFileManager::OnBnClickedButtonAdd()
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	AddToDriver(p);
-
+	int ret=AddPathList(p);
+	switch (ret)
+	{
+	case 1:
+		m_ruleState = L"添加路径成功";
+		break;
+	case 2:
+		m_ruleState = L"添加路径失败，已经存在";
+		break;
+	case 3:
+	default:
+		m_ruleState = L"添加路径失败";
+		break;
+	}
+	UpdateData(FALSE);
+	writeToFile();
 }
 
 
@@ -578,12 +601,31 @@ void CFileManager::OnBnClickedButtonDel()
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	DeleteFromDriver(p);
+
+	int ret = DeletePathList(p);
+	switch (ret)
+	{
+	case 1:
+		m_ruleState = L"删除路径成功";
+		break;
+	case 2:
+		m_ruleState = L"删除路径失败，不存在";
+		break;
+	case 3:
+	default:
+		m_ruleState = L"删除路径失败";
+		break;
+	}
+	UpdateData(FALSE);
+	writeToFile();
 }
 
 
 void CFileManager::OnBnClickedButtonPause()
 {
 	PauseDriver();
+	m_ruleState = L"暂停监控";
+	UpdateData(FALSE);
 	// TODO: Add your control notification handler code here
 }
 
@@ -592,4 +634,136 @@ void CFileManager::OnBnClickedButtonRestart()
 {
 	// TODO: Add your control notification handler code here
 	RenewDriver();
+	m_ruleState = L"继续监控";
+	UpdateData(FALSE);
+}
+WCHAR* NopEnter(WCHAR* str)  // 此处代码是抄的,  但是比较 好懂.
+{
+	WCHAR* p;
+	if ((p =wcschr(str, '\n')) != NULL)
+		* p = '\0';
+	return str;
+}
+bool addDefaultRule()
+{
+	FILE *fp; 
+	_wfopen_s(&fp,L".\\FILERULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);		
+		AddToDriver(p1);
+		AddPathList(p1);
+	}
+	fclose(fp);
+	return true;
+	
+
+}
+
+int AddPathList(WCHAR*  filename)
+{
+	pFileRule new_filename, current, precurrent;
+	new_filename = (pFileRule)malloc(sizeof(fileRule));
+	ZeroMemory(new_filename, sizeof(fileRule));
+	memcpy_s(new_filename->filePath, MAX_PATH, filename, MAX_PATH);
+	//MessageBoxW(NULL, new_filename->filePath, new_filename->filePath, MB_OK);
+	new_filename->pNext = NULL;
+	__try {
+	
+
+		new_filename->pNext = NULL;
+		if (NULL == g_fileRule)              //头是空的，路径添加到头
+		{
+			g_fileRule = new_filename;
+			return 1;
+		}
+		current = g_fileRule;
+		while (current != NULL)
+		{
+			if (!wcscmp(current->filePath,new_filename->filePath))//链表中含有这个路径，返回
+			{
+				free(new_filename);
+				new_filename = NULL;
+				return 2;
+			}
+			precurrent = current;
+			current = current->pNext;
+		}
+		//链表中没有这个路径，添加
+		current = g_fileRule;
+		while (current->pNext != NULL)
+		{
+			current = current->pNext;
+		}
+		current->pNext = new_filename;
+		return 1;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		free(new_filename);
+		new_filename = NULL;
+		return 3;
+	}
+}
+
+int DeletePathList(WCHAR*  filename)
+{
+	pFileRule new_filename, current, precurrent;
+	current = precurrent = g_fileRule;
+	while (current != NULL)
+	{
+		__try {
+			if (!wcscmp(current->filePath, filename))
+			{
+				//判断一下是否是头,如果是头，就让头指向第二个，删掉第一个
+				if (current == g_fileRule)
+				{
+					g_fileRule = current->pNext;
+					free(current);
+					current = NULL;
+					return 1;
+				}
+				//如果不是头，删掉当前的
+				precurrent->pNext = current->pNext;
+				current->pNext = NULL;
+				free(current);
+				current = NULL;
+				return 1;
+			}
+			precurrent = current;
+			current = current->pNext;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return 3;
+		}
+	}
+	return 2;
+}
+
+bool writeToFile()
+{
+	FILE *fp;
+	_wfopen_s(&fp, L".\\FILERULE.txt", L"w+");
+	if (fp == NULL)
+		return FALSE;
+	pFileRule new_filename, current, precurrent;
+	current = precurrent = g_fileRule;
+	while (current != NULL)
+	{
+		
+		fputws(current->filePath, fp);
+		if (current->pNext != NULL)
+		{
+			fputwc('\n', fp);
+		}
+		current = current->pNext;
+	}
+	fclose(fp);
+	return true;
 }

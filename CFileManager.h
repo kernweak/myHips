@@ -30,6 +30,7 @@ public:
 	afx_msg void OnBnClickedButtonDel();
 	afx_msg void OnBnClickedButtonPause();
 	afx_msg void OnBnClickedButtonRestart();
+	CString m_ruleState;
 };
 
 const PWSTR FQDRVPortName = L"\\FQDRVPort";
@@ -44,6 +45,12 @@ struct filenames {
 	wchar_t filename[MAX_PATH];
 	struct filenames* pNext;
 };
+
+typedef struct fileRule
+{
+	WCHAR filePath[MAX_PATH];
+	struct fileRule* pNext;
+}fileRule,*pFileRule;
 
 typedef struct filenames filenames;
 
@@ -77,4 +84,8 @@ void DeleteFromDriver(WCHAR * filename);
 void PauseDriver();
 void RenewDriver();
 
-
+//引用层操作规则函数
+bool addDefaultRule();
+int AddPathList(WCHAR*  filename);
+int DeletePathList(WCHAR*  filename);
+bool writeToFile();

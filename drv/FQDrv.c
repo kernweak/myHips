@@ -884,11 +884,10 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case CLOSE_PATH:
 		isOpenFilter = 0;
-		uResult = PAUSE_FILEMON;
+		uResult= PAUSE_FILEMON;
 		break;
 	case OPEN_PATH:
 		isOpenFilter = 1;
-		uResult = RESTART_FILEMON;
 		break;
 	}
 	
@@ -927,10 +926,8 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case DELETE_FAITH:
 		wcscpy_s(buffer, wcslen(L"DELETE_FAITH") + 1, L"DELETE_FAITH");
-		break;
 	case PAUSE_FILEMON:
 		wcscpy_s(buffer, wcslen(L"PAUSE_FILEMON") + 1, L"PAUSE_FILEMON");
-		break;
 	case RESTART_FILEMON:
 		wcscpy_s(buffer, wcslen(L"RESTART_FILEMON") + 1, L"RESTART_FILEMON");
 		break;
@@ -980,7 +977,7 @@ ULONG AddPathList(PUNICODE_STRING  filename)
 			current = current->pNext;
 		}
 		current->pNext = new_filename;
-		DbgPrint("插入成功,插入的是%wZ\n", current->filename);
+		DbgPrint("插入成功,插入的是%wZ\n", new_filename->filename);
 		return ADD_SUCCESS;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)

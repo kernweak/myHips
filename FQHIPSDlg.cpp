@@ -374,7 +374,6 @@ BOOL InstallDriver(const WCHAR* lpszDriverName, const WCHAR* lpszDriverPath, con
 		CloseServiceHandle(hServiceMgr);
 		return FALSE;
 	}
-	MessageBoxW(NULL, szDriverImagePath, szDriverImagePath, MB_OK);
 	// OpenSCManager成功  
 
 	//创建驱动所对应的服务
@@ -423,7 +422,6 @@ BOOL InstallDriver(const WCHAR* lpszDriverName, const WCHAR* lpszDriverPath, con
 	}
 	// 注册表驱动程序的DefaultInstance 值 
 	wsprintf(szTempStr, L"\%ls Instance", lpszDriverName);
-	MessageBoxW(NULL, szTempStr, szTempStr, MB_OK);
 	//wcscpy_s(szTempStr, lpszDriverName);
 	//wcscat_s(szTempStr, L" Instance");
 	if (RegSetValueEx(hKey, L"DefaultInstance", 0, REG_SZ, (CONST BYTE*)szTempStr, (DWORD)(wcslen(szTempStr)*sizeof(WCHAR))) != ERROR_SUCCESS)
