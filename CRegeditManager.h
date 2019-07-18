@@ -24,4 +24,6 @@ public:
 	CString m_szUNC;
 	CString m_szLocal;
 	afx_msg void OnBnClickedButtonU2l();
+	afx_msg void OnBnClickedButtonStartreg();
+	afx_msg void OnBnClickedButtonStopreg();
 };

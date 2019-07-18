@@ -795,3 +795,44 @@ bool writeToFile()
 	fclose(fp);
 	return true;
 }
+
+
+//注册表
+void PauseRegMon()
+{
+	Data data;
+	void *pData = NULL;
+
+	data.command = PAUSE_REGMON;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}
+
+
+void RenewRegMon()
+{
+	Data data;
+	void *pData = NULL;
+
+	data.command = RESTART_REGMON;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}

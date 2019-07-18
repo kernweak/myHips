@@ -5,7 +5,7 @@
 #include "FQHIPS.h"
 #include "CRegeditManager.h"
 #include "afxdialogex.h"
-
+#include "CFileManager.h"
 
 // CRegeditManager 对话框
 
@@ -33,6 +33,8 @@ void CRegeditManager::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(CRegeditManager, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_U2L, &CRegeditManager::OnBnClickedButtonU2l)
+	ON_BN_CLICKED(IDC_BUTTON_STARTREG, &CRegeditManager::OnBnClickedButtonStartreg)
+	ON_BN_CLICKED(IDC_BUTTON_STOPREG, &CRegeditManager::OnBnClickedButtonStopreg)
 END_MESSAGE_MAP()
 
 
@@ -44,4 +46,18 @@ void CRegeditManager::OnBnClickedButtonU2l()
 	// TODO: 在此添加控件通知处理程序代码
 	UpdateData(TRUE);
 	
+}
+
+
+void CRegeditManager::OnBnClickedButtonStartreg()
+{
+	// TODO: Add your control notification handler code here
+	RenewRegMon();
+}
+
+
+void CRegeditManager::OnBnClickedButtonStopreg()
+{
+	// TODO: Add your control notification handler code here
+	PauseRegMon();
 }

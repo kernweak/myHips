@@ -35,6 +35,7 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //
 pFilenames m_pfilenames=NULL;
 ULONG isOpenFilter = 1;
+ULONG isOpenReg = 1;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -909,6 +910,16 @@ NTSTATUS MessageNotifyCallback(
 	case OPEN_PATH:
 		isOpenFilter = 1;
 		break;
+	case PAUSE_REGMON:
+		isOpenReg = 0;
+		uResult = MPAUSE_REGMON;
+		break;
+	case RESTART_REGMON:
+		isOpenReg = 1;
+		uResult = MRESTART_REGMON;
+		break;
+	default:
+		break;
 	}
 	
 	////释放内存
@@ -950,6 +961,12 @@ NTSTATUS MessageNotifyCallback(
 		wcscpy_s(buffer, wcslen(L"PAUSE_FILEMON") + 1, L"PAUSE_FILEMON");
 	case RESTART_FILEMON:
 		wcscpy_s(buffer, wcslen(L"RESTART_FILEMON") + 1, L"RESTART_FILEMON");
+		break;
+	case MPAUSE_REGMON:
+		wcscpy_s(buffer, wcslen(L"PAUSE_REGMON") + 1, L"PAUSE_REGMON");
+		break;
+	case MRESTART_REGMON:
+		wcscpy_s(buffer, wcslen(L"RESTART_REGMON") + 1, L"RESTART_REGMON");
 		break;
 	default:
 		break;
@@ -1154,6 +1171,10 @@ NTSTATUS RegistryCallback
 	IN PVOID Argument2//操作的结构体指针
 )
 {
+	if (!isOpenReg)
+	{
+		return STATUS_SUCCESS;
+	}
 	ULONG Options = 0;//记录操作类型 4创建,5删除,6设置键值,7删除键值，8重命名键
 	BOOLEAN isAllow = TRUE;//是否放行
 	PFQDRV_NOTIFICATION notification = NULL;

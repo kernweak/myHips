@@ -37,7 +37,8 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
     DELETE_PATH,
     CLOSE_PATH,
     OPEN_PATH,
-
+	PAUSE_REGMON,
+	RESTART_REGMON,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -49,6 +50,8 @@ typedef enum _result {  //操作命令
 	DELETE_FAITH,
 	PAUSE_FILEMON,
 	RESTART_FILEMON,
+	MPAUSE_REGMON,
+	MRESTART_REGMON,
 } RuleResult;
 
 typedef struct filenames {      //路径链表结点

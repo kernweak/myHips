@@ -67,6 +67,8 @@ typedef enum _IOMONITOR_COMMAND {
 	DELETE_PATH,
 	CLOSE_PATH,
 	OPEN_PATH,
+	PAUSE_REGMON,
+	RESTART_REGMON,
 } IOMonitorCommand;
 
 
@@ -89,3 +91,7 @@ bool addDefaultRule();
 int AddPathList(WCHAR*  filename);
 int DeletePathList(WCHAR*  filename);
 bool writeToFile();
+
+//注册表通信函数
+void PauseRegMon();
+void RenewRegMon();
