@@ -256,21 +256,49 @@ ScannerWorker(
 		case 3:
 			wcscpy_s(strOptions, 50, L"删除");
 			break;
+		case 4:
+			wcscpy_s(strOptions, 50, L"新键注册表");
+			break;
+		case 5:
+			wcscpy_s(strOptions, 50, L"删除key");
+			break;
+		case 6:
+			wcscpy_s(strOptions, 50, L"设置键值");
+			break;
+		case 7:
+			wcscpy_s(strOptions, 50, L"删除键值");
+			break;
+		case 8:
+			wcscpy_s(strOptions, 50, L"重命名键值");
+			break;
 		default:
 			wcscpy_s(strOptions, 50, L"爆炸");
 			break;
 		}
 
 		//memset(strPop,'\0',MAX_PATH*2);
-		if (notification->Operation == 2)
+		switch (notification->Operation)
 		{
-			//sprintf(strPop,"进程:%S\r\n操作:%s\r\n目标:%S\r\n重名为:%S\r\n是否放行?",notification->ProcessPath,strOptions,notification->TargetPath,notification->RePathName);
-			tip.Format(L"进程:%s\r\n操作:%s\r\n目标:%s\r\n重名为:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath, notification->RePathName);
-		}
-		else
-		{
-			//sprintf(strPop,"进程:%S\r\n操作:%s\r\n目标:%S\r\n是否放行?",notification->ProcessPath,strOptions,notification->TargetPath);
+		case 1:
 			tip.Format(L"进程:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
+		case 2:
+			tip.Format(L"进程:%s\r\n操作:%s\r\n目标:%s\r\n重名为:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath, notification->RePathName);
+			break;
+		case 3:
+			tip.Format(L"进程:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+		case 4:
+			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+		case 5:
+			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n是否放行?", notification->ProcessPath, strOptions);
+		case 6:
+			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+		case 7:
+			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+		case 8:
+			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+		default:
+			break;
 		}
 
 		Sleep(1000);

@@ -201,5 +201,21 @@ NTSTATUS MessageNotifyCallback(
 ULONG AddPathList(PUNICODE_STRING  filename);
 ULONG DeletePathList(PUNICODE_STRING  filename);
 BOOLEAN searchRule(WCHAR *path);
+
+//注册表相关
+
+NTKERNELAPI UCHAR* PsGetProcessImageFileName(PEPROCESS Process);//获取进程的DOS文件路径
+LARGE_INTEGER CmHandle;
+NTSTATUS PtRegisterInit();
+NTSTATUS PtRegisterUnInit();
+BOOLEAN IsProcessName(char *string, PEPROCESS eprocess);
+BOOLEAN GetRegistryObjectCompleteName(PUNICODE_STRING pRegistryPath, PUNICODE_STRING pPartialRegistryPath, PVOID pRegistryObject);
+NTSTATUS RegistryCallback
+(
+	IN PVOID CallbackContext,
+	IN PVOID Argument1,//操作类型，
+	IN PVOID Argument2//操作的结构体指针
+);
+
 #endif /* __FQDRV_H__ */
 

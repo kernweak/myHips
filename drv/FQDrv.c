@@ -6,6 +6,22 @@
 #include "commonFun.h"
 
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
+//注册表相关
+#define REGISTRY_POOL_TAG 'pRE'
+
+NTKERNELAPI NTSTATUS ObQueryNameString
+(
+	IN  PVOID Object,
+	OUT POBJECT_NAME_INFORMATION ObjectNameInfo,
+	IN  ULONG Length,
+	OUT PULONG ReturnLength
+);
+
+NTKERNELAPI NTSTATUS RtlUnicodeStringCopy
+(
+	__out  PUNICODE_STRING DestinationString,
+	__in   PUNICODE_STRING SourceString
+);
 
 //
 //  Structure that contains all the global data structures
@@ -144,7 +160,11 @@ DriverEntry(
 	//
 	//  Register with filter manager.
 	//
-
+	status = PtRegisterInit();
+	if (!NT_SUCCESS(status))
+	{
+		PtRegisterUnInit();
+	}
 	status = FltRegisterFilter(DriverObject,
 		&FilterRegistration,
 		&FQDRVData.Filter);
@@ -277,7 +297,7 @@ FQDRVUnload(
 	//
 
 	FltUnregisterFilter(FQDRVData.Filter);
-
+	PtRegisterUnInit();
 	return STATUS_SUCCESS;
 }
 
@@ -496,7 +516,7 @@ FQDRVPreWrite(
 BOOLEAN isNeedWatchFile(PFLT_CALLBACK_DATA Data)
 {
 	BOOLEAN Ret = FALSE;
-	UNICODE_STRING ustrRule = { 0 };
+	//UNICODE_STRING ustrRule = { 0 };
 	PFLT_FILE_NAME_INFORMATION nameInfo = { 0 };
 	NTSTATUS status = STATUS_SUCCESS;
 	status = FltGetFileNameInformation(Data,
@@ -1052,4 +1072,342 @@ BOOLEAN searchRule(WCHAR *path)
 		}
 	}
 	return FALSE;
+}
+
+
+NTSTATUS PtRegisterInit()
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	status = CmRegisterCallback(RegistryCallback, NULL, &CmHandle);
+	if (NT_SUCCESS(status))
+		DbgPrint("CmRegisterCallback SUCCESS!");
+	else
+		DbgPrint("CmRegisterCallback Failed!");
+	return status;
+
+}
+NTSTATUS PtRegisterUnInit()
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	status=CmUnRegisterCallback(CmHandle);
+	if (NT_SUCCESS(status))
+		DbgPrint("CmUnRegisterCallback SUCCESS!");
+	else
+		DbgPrint("CmUnRegisterCallback Failed!");
+	return status;
+}
+
+BOOLEAN IsProcessName(char *string, PEPROCESS eprocess)
+{
+	char xx[260] = { 0 };
+	strcpy(xx, PsGetProcessImageFileName(eprocess));
+	if (!_stricmp(xx, string))
+		return TRUE;
+	else
+		return FALSE;
+}
+
+BOOLEAN GetRegistryObjectCompleteName(PUNICODE_STRING pRegistryPath, PUNICODE_STRING pPartialRegistryPath, PVOID pRegistryObject)
+{
+	BOOLEAN foundCompleteName = FALSE;
+	BOOLEAN partial = FALSE;
+	if ((!MmIsAddressValid(pRegistryObject)) || (pRegistryObject == NULL))
+		return FALSE;
+	/* Check to see if the partial name is really the complete name */
+	if (pPartialRegistryPath != NULL)
+	{
+		if ((((pPartialRegistryPath->Buffer[0] == '\\') || (pPartialRegistryPath->Buffer[0] == '%')) ||
+			((pPartialRegistryPath->Buffer[0] == 'T') && (pPartialRegistryPath->Buffer[1] == 'R') &&
+			(pPartialRegistryPath->Buffer[2] == 'Y') && (pPartialRegistryPath->Buffer[3] == '\\'))))
+		{
+			RtlCopyUnicodeString(pRegistryPath, pPartialRegistryPath);
+			partial = TRUE;
+			foundCompleteName = TRUE;
+		}
+	}
+	if (!foundCompleteName)
+	{
+		/* Query the object manager in the kernel for the complete name */
+		NTSTATUS status;
+		ULONG returnedLength;
+		PUNICODE_STRING pObjectName = NULL;
+		status = ObQueryNameString(pRegistryObject, (POBJECT_NAME_INFORMATION)pObjectName, 0, &returnedLength);
+		if (status == STATUS_INFO_LENGTH_MISMATCH)
+		{
+			pObjectName = ExAllocatePoolWithTag(NonPagedPool, returnedLength, REGISTRY_POOL_TAG);
+			status = ObQueryNameString(pRegistryObject, (POBJECT_NAME_INFORMATION)pObjectName, returnedLength, &returnedLength);
+			if (NT_SUCCESS(status))
+			{
+				RtlCopyUnicodeString(pRegistryPath, pObjectName);
+				foundCompleteName = TRUE;
+			}
+			ExFreePoolWithTag(pObjectName, REGISTRY_POOL_TAG);
+		}
+	}
+	return foundCompleteName;
+}
+
+NTSTATUS RegistryCallback
+(
+	IN PVOID CallbackContext,
+	IN PVOID Argument1,//操作类型，
+	IN PVOID Argument2//操作的结构体指针
+)
+{
+	ULONG Options = 0;//记录操作类型 4创建,5删除,6设置键值,7删除键值，8重命名键
+	BOOLEAN isAllow = TRUE;//是否放行
+	PFQDRV_NOTIFICATION notification = NULL;
+	ULONG replyLength = 0;
+	BOOLEAN SafeToOpen;
+	SafeToOpen = TRUE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	long type;
+	NTSTATUS CallbackStatus = STATUS_SUCCESS;
+	UNICODE_STRING registryPath;
+	registryPath.Length = 0;
+	registryPath.MaximumLength = 2048 * sizeof(WCHAR);
+	registryPath.Buffer = ExAllocatePoolWithTag(NonPagedPool, registryPath.MaximumLength, REGISTRY_POOL_TAG);
+
+
+	notification = ExAllocatePoolWithTag(NonPagedPool,
+		sizeof(FQDRV_NOTIFICATION),
+		'nacS');
+
+	if (NULL == notification)
+	{
+		CallbackStatus = STATUS_INSUFFICIENT_RESOURCES;
+		return CallbackStatus;
+	}
+
+
+	if (registryPath.Buffer == NULL)
+		return STATUS_SUCCESS;
+	type = (REG_NOTIFY_CLASS)Argument1;
+	switch (type)
+	{
+	case RegNtPreCreateKeyEx:	//出现两次是因为一次是OpenKey，一次是createKey
+	{
+		if (IsProcessName("regedit.exe", PsGetCurrentProcess()))
+		{
+			GetRegistryObjectCompleteName(&registryPath, NULL, ((PREG_CREATE_KEY_INFORMATION)Argument2)->RootObject);
+			DbgPrint("[RegNtPreCreateKeyEx]KeyPath: %wZ", &registryPath);	//新键的路径
+			DbgPrint("[RegNtPreCreateKeyEx]KeyName: %wZ",
+				((PREG_CREATE_KEY_INFORMATION)Argument2)->CompleteName);//新键的名称
+
+			notification->Operation = 4;
+			char newPath[MAX_PATH] = { 0 };
+			WCHAR newPath1[MAX_PATH] = { 0 };
+			UnicodeToChar(&registryPath, newPath);
+			CharToWchar(newPath, newPath1);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+			
+			char newName[MAX_PATH] = { 0 };
+			WCHAR newName1[MAX_PATH] = { 0 };
+			UnicodeToChar(((PREG_CREATE_KEY_INFORMATION)Argument2)->CompleteName, newName);
+			CharToWchar(newName, newName1);
+			wcscpy_s(notification->TargetPath, MAX_PATH, newName1);
+			replyLength = sizeof(FQDRV_REPLY);
+			status = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == status) {
+			
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CallbackStatus = STATUS_SUCCESS;
+				}
+				else {
+					CallbackStatus = STATUS_ACCESS_DENIED;
+				}
+			}
+
+			//CallbackStatus = STATUS_ACCESS_DENIED;
+		}
+		break;
+	}
+	case RegNtPreDeleteKey:
+	{
+		if (IsProcessName("regedit.exe", PsGetCurrentProcess()))
+		{
+			GetRegistryObjectCompleteName(&registryPath, NULL, ((PREG_DELETE_KEY_INFORMATION)Argument2)->Object);
+			DbgPrint("[RegNtPreDeleteKey]%wZ", &registryPath);				//新键的路径
+
+			notification->Operation = 5;
+			char newPath[MAX_PATH] = { 0 };
+			WCHAR newPath1[MAX_PATH] = { 0 };
+			UnicodeToChar(&registryPath, newPath);
+			CharToWchar(newPath, newPath1);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+
+			replyLength = sizeof(FQDRV_REPLY);
+			status = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == status) {
+
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CallbackStatus = STATUS_SUCCESS;
+				}
+				else {
+					CallbackStatus = STATUS_ACCESS_DENIED;
+				}
+			}
+
+			//CallbackStatus = STATUS_ACCESS_DENIED;
+		}
+		break;
+	}
+	case RegNtPreSetValueKey:
+	{
+		if (IsProcessName("regedit.exe", PsGetCurrentProcess()))
+		{
+			GetRegistryObjectCompleteName(&registryPath, NULL, ((PREG_SET_VALUE_KEY_INFORMATION)Argument2)->Object);
+			DbgPrint("[RegNtPreSetValueKey]KeyPath: %wZ", &registryPath);
+			DbgPrint("[RegNtPreSetValueKey]ValName: %wZ", ((PREG_SET_VALUE_KEY_INFORMATION)Argument2)->ValueName);
+			
+			notification->Operation = 6;
+			char newPath[MAX_PATH] = { 0 };
+			WCHAR newPath1[MAX_PATH] = { 0 };
+			UnicodeToChar(&registryPath, newPath);
+			CharToWchar(newPath, newPath1);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+
+			char newName[MAX_PATH] = { 0 };
+			WCHAR newName1[MAX_PATH] = { 0 };
+			UnicodeToChar(((PREG_SET_VALUE_KEY_INFORMATION)Argument2)->ValueName, newName);
+			CharToWchar(newName, newName1);
+			wcscpy_s(notification->TargetPath, MAX_PATH, newName1);
+			replyLength = sizeof(FQDRV_REPLY);
+			status = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == status) {
+
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CallbackStatus = STATUS_SUCCESS;
+				}
+				else {
+					CallbackStatus = STATUS_ACCESS_DENIED;
+				}
+			}
+
+			//CallbackStatus = STATUS_ACCESS_DENIED;
+		}
+		break;
+	}
+	case RegNtPreDeleteValueKey:
+	{
+		if (IsProcessName("regedit.exe", PsGetCurrentProcess()))
+		{
+			GetRegistryObjectCompleteName(&registryPath, NULL, ((PREG_DELETE_VALUE_KEY_INFORMATION)Argument2)->Object);
+			DbgPrint("[RegNtPreDeleteValueKey]KeyPath: %wZ", &registryPath);
+			DbgPrint("[RegNtPreDeleteValueKey]ValName: %wZ", ((PREG_DELETE_VALUE_KEY_INFORMATION)Argument2)->ValueName);
+
+			notification->Operation = 7;
+			char newPath[MAX_PATH] = { 0 };
+			WCHAR newPath1[MAX_PATH] = { 0 };
+			UnicodeToChar(&registryPath, newPath);
+			CharToWchar(newPath, newPath1);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+
+			char newName[MAX_PATH] = { 0 };
+			WCHAR newName1[MAX_PATH] = { 0 };
+			UnicodeToChar(((PREG_DELETE_VALUE_KEY_INFORMATION)Argument2)->ValueName, newName);
+			CharToWchar(newName, newName1);
+			wcscpy_s(notification->TargetPath, MAX_PATH, newName1);
+			replyLength = sizeof(FQDRV_REPLY);
+			status = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == status) {
+
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CallbackStatus = STATUS_SUCCESS;
+				}
+				else {
+					CallbackStatus = STATUS_ACCESS_DENIED;
+				}
+			}
+
+			//CallbackStatus = STATUS_ACCESS_DENIED;
+		}
+		break;
+	}
+	case RegNtPreRenameKey:
+	{
+		if (IsProcessName("regedit.exe", PsGetCurrentProcess()))
+		{
+			GetRegistryObjectCompleteName(&registryPath, NULL, ((PREG_RENAME_KEY_INFORMATION)Argument2)->Object);
+			DbgPrint("[RegNtPreRenameKey]KeyPath: %wZ", &registryPath);
+			DbgPrint("[RegNtPreRenameKey]NewName: %wZ", ((PREG_RENAME_KEY_INFORMATION)Argument2)->NewName);
+
+			notification->Operation = 8;
+			char newPath[MAX_PATH] = { 0 };
+			WCHAR newPath1[MAX_PATH] = { 0 };
+			UnicodeToChar(&registryPath, newPath);
+			CharToWchar(newPath, newPath1);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+
+			char newName[MAX_PATH] = { 0 };
+			WCHAR newName1[MAX_PATH] = { 0 };
+			UnicodeToChar(((PREG_RENAME_KEY_INFORMATION)Argument2)->NewName, newName);
+			CharToWchar(newName, newName1);
+			wcscpy_s(notification->TargetPath, MAX_PATH, newName1);
+			replyLength = sizeof(FQDRV_REPLY);
+			status = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == status) {
+
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CallbackStatus = STATUS_SUCCESS;
+				}
+				else {
+					CallbackStatus = STATUS_ACCESS_DENIED;
+				}
+			}
+
+			//CallbackStatus = STATUS_ACCESS_DENIED;
+		}
+		break;
+	}
+	//『注册表编辑器』里的“重命名键值”是没有直接函数的，是先SetValueKey再DeleteValueKey
+	default:
+		break;
+	}
+	
+
+	if (registryPath.Buffer != NULL)
+		ExFreePoolWithTag(registryPath.Buffer, REGISTRY_POOL_TAG);
+	return CallbackStatus;
 }
