@@ -39,6 +39,9 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
     OPEN_PATH,
 	PAUSE_REGMON,
 	RESTART_REGMON,
+	DEFAULT_PROCESS,
+	ADD_PROCESS,
+	DELETE_PROCESS,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -201,9 +204,9 @@ NTSTATUS MessageNotifyCallback(
 	OUT PVOID OutputBuffer OPTIONAL,
 	IN ULONG OutputBufferLength,//用户可以接受的数据的最大长度.
 	OUT PULONG ReturnOutputBufferLength);
-ULONG AddPathList(PUNICODE_STRING  filename);
-ULONG DeletePathList(PUNICODE_STRING  filename);
-BOOLEAN searchRule(WCHAR *path);
+ULONG AddPathList(PUNICODE_STRING  filename, pFilenames *headFilenames);
+ULONG DeletePathList(PUNICODE_STRING  filename, pFilenames *headFilenames);
+BOOLEAN searchRule(WCHAR *path, pFilenames *headFilenames);
 
 //注册表相关
 
@@ -237,5 +240,6 @@ VOID MyCreateProcessNotifyEx
 );
 NTSTATUS PtProcessInit();
 NTSTATUS PtProcessUnInit();
+BOOLEAN searchProcessRule(WCHAR *path, pFilenames *headFilenames);
 #endif /* __FQDRV_H__ */
 

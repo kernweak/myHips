@@ -34,6 +34,8 @@
 
 HANDLE g_port = 0;
 pFileRule g_fileRule = NULL;
+pFileRule g_ProcessRule = NULL;
+
 typedef struct _SCANNER_THREAD_CONTEXT {
 
 	HANDLE Port;
@@ -535,11 +537,11 @@ HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize)
 
 
 
-void AddToDriver(WCHAR * filename)
+void AddToDriver(WCHAR * filename, IOMonitorCommand cmd)
 {
 	Data data;
 	Data *pData = NULL;
-	data.command = ADD_PATH;
+	data.command = cmd;
 	wcscpy_s(data.filename, MAX_PATH, filename);
 	pData = &data;
 	HRESULT hResult = SendToDriver(pData, sizeof(data));
@@ -551,11 +553,11 @@ void AddToDriver(WCHAR * filename)
 		OutputDebugString(L"FilterSendMessage is ok!\n");
 	}
 }
-void DeleteFromDriver(WCHAR * filename)
+void DeleteFromDriver(WCHAR * filename, IOMonitorCommand cmd)
 {
 	Data data;
 	void *pData = NULL;
-	data.command = DELETE_PATH;
+	data.command = cmd;
 	wcscpy_s(data.filename, MAX_PATH, filename);
 
 	pData = &data.command;
@@ -615,8 +617,8 @@ void CFileManager::OnBnClickedButtonAdd()
 	// TODO: Add your control notification handler code here
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
-	AddToDriver(p);
-	int ret=AddPathList(p);
+	AddToDriver(p,ADD_PATH);
+	int ret=AddPathList(p,&g_fileRule);
 	switch (ret)
 	{
 	case 1:
@@ -640,9 +642,9 @@ void CFileManager::OnBnClickedButtonDel()
 	// TODO: Add your control notification handler code here
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
-	DeleteFromDriver(p);
+	DeleteFromDriver(p,DELETE_PATH);
 
-	int ret = DeletePathList(p);
+	int ret = DeletePathList(p,&g_fileRule);
 	switch (ret)
 	{
 	case 1:
@@ -696,8 +698,8 @@ bool addDefaultRule()
 		WCHAR *p1;
 		fgetws(p, MAX_PATH, fp);
 		p1 = NopEnter(p);		
-		AddToDriver(p1);
-		AddPathList(p1);
+		AddToDriver(p1,ADD_PATH);
+		AddPathList(p1,&g_fileRule);
 	}
 	fclose(fp);
 	return true;
@@ -705,7 +707,7 @@ bool addDefaultRule()
 
 }
 
-int AddPathList(WCHAR*  filename)
+int AddPathList(WCHAR*  filename ,pFileRule* headFileRule)
 {
 	pFileRule new_filename, current, precurrent;
 	new_filename = (pFileRule)malloc(sizeof(fileRule));
@@ -717,12 +719,12 @@ int AddPathList(WCHAR*  filename)
 	
 
 		new_filename->pNext = NULL;
-		if (NULL == g_fileRule)              //头是空的，路径添加到头
+		if (NULL == *headFileRule)              //头是空的，路径添加到头
 		{
-			g_fileRule = new_filename;
+			*headFileRule = new_filename;
 			return 1;
 		}
-		current = g_fileRule;
+		current = *headFileRule;
 		while (current != NULL)
 		{
 			if (!wcscmp(current->filePath,new_filename->filePath))//链表中含有这个路径，返回
@@ -735,7 +737,7 @@ int AddPathList(WCHAR*  filename)
 			current = current->pNext;
 		}
 		//链表中没有这个路径，添加
-		current = g_fileRule;
+		current = *headFileRule;
 		while (current->pNext != NULL)
 		{
 			current = current->pNext;
@@ -751,19 +753,19 @@ int AddPathList(WCHAR*  filename)
 	}
 }
 
-int DeletePathList(WCHAR*  filename)
+int DeletePathList(WCHAR*  filename, pFileRule* headFileRule)
 {
 	pFileRule new_filename, current, precurrent;
-	current = precurrent = g_fileRule;
+	current = precurrent = *headFileRule;
 	while (current != NULL)
 	{
 		__try {
 			if (!wcscmp(current->filePath, filename))
 			{
 				//判断一下是否是头,如果是头，就让头指向第二个，删掉第一个
-				if (current == g_fileRule)
+				if (current == *headFileRule)
 				{
-					g_fileRule = current->pNext;
+					*headFileRule = current->pNext;
 					free(current);
 					current = NULL;
 					return 1;

@@ -38,7 +38,8 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //
 //  Function prototypes
 //
-pFilenames m_pfilenames=NULL;
+pFilenames m_pfilenames=NULL;//文件规则链表
+pFilenames m_pProcessNames = NULL;//进程规则链表
 ULONG isOpenFilter = 1;
 ULONG isOpenReg = 1;
 NTSTATUS
@@ -451,7 +452,7 @@ FQDRVPostCreate(
 		//DbgPrint(" tmp路径是%S\n", tmp);
 
 		//scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
-		scanFile = searchRule(tmp);
+		scanFile = searchRule(tmp,&m_pfilenames);
 
 		FltReleaseFileNameInformation(nameInfo);
 
@@ -545,7 +546,7 @@ BOOLEAN isNeedWatchFile(PFLT_CALLBACK_DATA Data)
 	wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
 	//RtlInitUnicodeString(&ustrRule, L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.SYS");
 	//Ret = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
-	Ret=searchRule(tmp);
+	Ret=searchRule(tmp,&m_pfilenames);
 	FltReleaseFileNameInformation(nameInfo);
 	return Ret;
 }
@@ -868,8 +869,17 @@ NTSTATUS MessageNotifyCallback(
 	UNREFERENCED_PARAMETER(PortCookie);
 	Data *data = (Data*)InputBuffer;
 	WCHAR rulePath[MAX_PATH] = { 0 };
-	GetNtDeviceName(data->filename, rulePath);
-	DbgPrint("用户发来的信息是:%ls,GetNtDeviceName之后是%ls\n", data->filename,rulePath);
+	if (data->command == DEFAULT_PATH || data->command == ADD_PATH || data->command == DELETE_PATH)
+	{
+		
+		GetNtDeviceName(data->filename, rulePath);
+		DbgPrint("用户发来的信息是:%ls,GetNtDeviceName之后是%ls\n", data->filename, rulePath);
+	}
+	else
+	{
+		wcscpy_s(rulePath, MAX_PATH, data->filename);
+	}
+	
 
 
 	IOMonitorCommand command;
@@ -907,13 +917,13 @@ NTSTATUS MessageNotifyCallback(
 	switch (command)
 	{
 	case DEFAULT_PATH:
-		uResult=AddPathList(&cachePath);
+		uResult=AddPathList(&cachePath,&m_pfilenames);
 		break;
 	case ADD_PATH:
-		uResult=AddPathList(&cachePath);
+		uResult=AddPathList(&cachePath, &m_pfilenames);
 		break;
 	case DELETE_PATH:
-		uResult = DeletePathList(&cachePath);
+		uResult = DeletePathList(&cachePath, &m_pfilenames);
 		break;
 	case CLOSE_PATH:
 		isOpenFilter = 0;
@@ -929,6 +939,15 @@ NTSTATUS MessageNotifyCallback(
 	case RESTART_REGMON:
 		isOpenReg = 1;
 		uResult = MRESTART_REGMON;
+		break;
+	case DEFAULT_PROCESS:
+		uResult = AddPathList(&cachePath, &m_pProcessNames);
+		break;
+	case ADD_PROCESS:
+		uResult = AddPathList(&cachePath, &m_pProcessNames);
+		break;
+	case DELETE_PROCESS:
+		uResult = DeletePathList(&cachePath, &m_pProcessNames);
 		break;
 	default:
 		break;
@@ -989,7 +1008,7 @@ NTSTATUS MessageNotifyCallback(
 }
 
 
-ULONG AddPathList(PUNICODE_STRING  filename)
+ULONG AddPathList(PUNICODE_STRING  filename, pFilenames *headFilenames)
 {
 	filenames * new_filename, *current, *precurrent;
 	new_filename = ExAllocatePool(NonPagedPool, sizeof(filenames));
@@ -999,13 +1018,13 @@ ULONG AddPathList(PUNICODE_STRING  filename)
 		RtlCopyUnicodeString(&new_filename->filename, filename);
 
 		new_filename->pNext = NULL;
-		if (NULL == m_pfilenames)              //头是空的，路径添加到头
+		if (NULL == *headFilenames)              //头是空的，路径添加到头
 		{
-			m_pfilenames = new_filename;
+			*headFilenames = new_filename;
 			DbgPrint("插入成功，头是空的，路径添加到头,插入的是%wZ\n", new_filename->filename);
 			return ADD_SUCCESS;
 		}
-		current = m_pfilenames;
+		current = *headFilenames;
 		while (current != NULL)
 		{
 			if (RtlEqualUnicodeString(&new_filename->filename, &current->filename, TRUE))
@@ -1020,7 +1039,7 @@ ULONG AddPathList(PUNICODE_STRING  filename)
 			current = current->pNext;
 		}
 		//链表中没有这个路径，添加
-		current = m_pfilenames;
+		current = *headFilenames;
 		while (current->pNext != NULL)
 		{
 			current = current->pNext;
@@ -1037,20 +1056,20 @@ ULONG AddPathList(PUNICODE_STRING  filename)
 		return ADD_FAITH;
 	}
 }
-ULONG DeletePathList(PUNICODE_STRING  filename)
+ULONG DeletePathList(PUNICODE_STRING  filename, pFilenames *headFilenames)
 {
 	filenames  *current, *precurrent;
-	current = precurrent = m_pfilenames;
+	current = precurrent = *headFilenames;
 	while (current != NULL)
 	{
 		__try {
 			if (RtlEqualUnicodeString(filename, &current->filename, TRUE))
 			{
 				//判断一下是否是头,如果是头，就让头指向第二个，删掉第一个
-				if (current == m_pfilenames)
+				if (current == *headFilenames)
 				{
 					DbgPrint("删除成功，删除的是头结点是%wZ\n", current->filename);
-					m_pfilenames = current->pNext;
+					*headFilenames = current->pNext;
 					RtlFreeUnicodeString(&current->filename);
 					
 					ExFreePool(current);
@@ -1077,10 +1096,10 @@ ULONG DeletePathList(PUNICODE_STRING  filename)
 	return DELETE_PATH_NOT_EXISTS;
 }
 
-BOOLEAN searchRule(WCHAR *path)
+BOOLEAN searchRule(WCHAR *path, pFilenames *headFilenames)
 {
 	filenames *current;
-	current =  m_pfilenames;
+	current = *headFilenames;
 	WCHAR tmpPath[MAX_PATH]={0};
 	while (current != NULL)
 	{
@@ -1090,6 +1109,32 @@ BOOLEAN searchRule(WCHAR *path)
 			ToUpperString(tmp);
 			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
 			if (IsPatternMatch(tmp, path, TRUE))
+			{
+				return TRUE;
+			}
+			current = current->pNext;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return FALSE;
+		}
+	}
+	return FALSE;
+}
+
+BOOLEAN searchProcessRule(WCHAR *path, pFilenames *headFilenames)
+{
+	filenames *current;
+	current = *headFilenames;
+	WCHAR tmpPath[MAX_PATH] = { 0 };
+	while (current != NULL)
+	{
+		__try {
+			WCHAR tmp[MAX_PATH] = { 0 };
+			wcsncpy_s(tmp, current->filename.Length, current->filename.Buffer, current->filename.Length);
+			//ToUpperString(tmp);
+			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
+			if (!wcscmp(tmp, path))
 			{
 				return TRUE;
 			}
@@ -1262,6 +1307,7 @@ NTSTATUS RegistryCallback
 
 			//CallbackStatus = STATUS_ACCESS_DENIED;
 		}
+
 		break;
 	}
 	case RegNtPreDeleteKey:
@@ -1438,7 +1484,10 @@ NTSTATUS RegistryCallback
 	default:
 		break;
 	}
-	
+	if (NULL != notification) {
+
+		ExFreePoolWithTag(notification, 'nacS');
+	}
 
 	if (registryPath.Buffer != NULL)
 		ExFreePoolWithTag(registryPath.Buffer, REGISTRY_POOL_TAG);
@@ -1478,6 +1527,8 @@ VOID MyCreateProcessNotifyEx
 	PFQDRV_NOTIFICATION notification = NULL;
 	BOOLEAN SafeToOpen;
 	SafeToOpen = TRUE;
+	BOOLEAN scanFile;
+	scanFile = TRUE;
 	ULONG replyLength = 0;
 	notification = ExAllocatePoolWithTag(NonPagedPool,
 		sizeof(FQDRV_NOTIFICATION),
@@ -1495,49 +1546,57 @@ VOID MyCreateProcessNotifyEx
 			GetProcessNameByProcessId(CreateInfo->ParentProcessId),
 			CreateInfo->ImageFileName);
 		strcpy(xxx, PsGetProcessImageFileName(Process));
-		
-		notification->Operation = 9;
-		CHAR parentProcessName[MAX_PATH] = { 0 };
-		WCHAR wparentProcessName[MAX_PATH] = { 0 };
-		strcpy_s(parentProcessName,MAX_PATH,GetProcessNameByProcessId(CreateInfo->ParentProcessId));
-		CharToWchar(parentProcessName, wparentProcessName);
-		wcscpy_s(notification->ProcessPath, MAX_PATH, wparentProcessName);
 
-		char processName[MAX_PATH] = { 0 };
-		WCHAR wProcessName[MAX_PATH] = { 0 };
-		UnicodeToChar(CreateInfo->ImageFileName, processName);
-		CharToWchar(processName, wProcessName);
-		wcscpy_s(notification->TargetPath, MAX_PATH, wProcessName);
-		replyLength = sizeof(FQDRV_REPLY);
-		st = FltSendMessage(FQDRVData.Filter,
-			&FQDRVData.ClientPort,
-			notification,
-			sizeof(FQDRV_NOTIFICATION),
-			notification,
-			&replyLength,
-			NULL);
-		if (STATUS_SUCCESS == st) {
+		WCHAR tmp[256] = { 0 };
+		CharToWchar(PsGetProcessImageFileName(Process), tmp);
 
-			SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
-			if (SafeToOpen)
-			{
-				CreateInfo->CreationStatus = STATUS_SUCCESS;
+		scanFile = searchProcessRule(tmp, &m_pProcessNames);
+		if (scanFile) {
+
+			notification->Operation = 9;
+			CHAR parentProcessName[MAX_PATH] = { 0 };
+			WCHAR wparentProcessName[MAX_PATH] = { 0 };
+			strcpy_s(parentProcessName, MAX_PATH, GetProcessNameByProcessId(CreateInfo->ParentProcessId));
+			CharToWchar(parentProcessName, wparentProcessName);
+			wcscpy_s(notification->ProcessPath, MAX_PATH, wparentProcessName);
+
+			char processName[MAX_PATH] = { 0 };
+			WCHAR wProcessName[MAX_PATH] = { 0 };
+			UnicodeToChar(CreateInfo->ImageFileName, processName);
+			CharToWchar(processName, wProcessName);
+			wcscpy_s(notification->TargetPath, MAX_PATH, wProcessName);
+			replyLength = sizeof(FQDRV_REPLY);
+			st = FltSendMessage(FQDRVData.Filter,
+				&FQDRVData.ClientPort,
+				notification,
+				sizeof(FQDRV_NOTIFICATION),
+				notification,
+				&replyLength,
+				NULL);
+			if (STATUS_SUCCESS == st) {
+
+				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+				if (SafeToOpen)
+				{
+					CreateInfo->CreationStatus = STATUS_SUCCESS;
+				}
+				else {
+					CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;
+				}
 			}
-			else {
-				CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;
-			}
-		}
 
-		if (!_stricmp(xxx, "mspaint.exe"))
-		{
-			DbgPrint("禁止创建画图进程！");
-			CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;	//禁止创建进程
 		}
 	}
 	else
 	{
 		DbgPrint("[monitor_create_process_x64]进程退出: %s", PsGetProcessImageFileName(Process));
 	}
+
+	if (NULL != notification) {
+
+		ExFreePoolWithTag(notification, 'nacS');
+	}
+
 }
 
 

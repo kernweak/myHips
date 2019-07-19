@@ -69,6 +69,9 @@ typedef enum _IOMONITOR_COMMAND {
 	OPEN_PATH,
 	PAUSE_REGMON,
 	RESTART_REGMON,
+	DEFAULT_PROCESS,
+	ADD_PROCESS,
+	DELETE_PROCESS,
 } IOMonitorCommand;
 
 
@@ -81,17 +84,21 @@ typedef enum _IOMONITOR_COMMAND {
 HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize);
 
 //控制驱动路径
-void AddToDriver(WCHAR * filename);
-void DeleteFromDriver(WCHAR * filename);
+void AddToDriver(WCHAR * filename, IOMonitorCommand cmd);
+void DeleteFromDriver(WCHAR * filename,IOMonitorCommand cmd);
 void PauseDriver();
 void RenewDriver();
 
 //引用层操作规则函数
 bool addDefaultRule();
-int AddPathList(WCHAR*  filename);
-int DeletePathList(WCHAR*  filename);
+int AddPathList(WCHAR*  filename, pFileRule* headFileRule);
+int DeletePathList(WCHAR*  filename, pFileRule* headFileRule);
 bool writeToFile();
 
 //注册表通信函数
 void PauseRegMon();
 void RenewRegMon();
+
+
+extern pFileRule g_fileRule;
+extern pFileRule g_ProcessRule;

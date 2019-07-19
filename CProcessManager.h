@@ -20,4 +20,11 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
 
 	DECLARE_MESSAGE_MAP()
+public:
+	CString m_ProcessRule;
+	afx_msg void OnBnClickedButtonAdd();
+	CString m_ruleState;
+	afx_msg void OnBnClickedButtonDel();
 };
+
+bool writeToProcessMonFile();
