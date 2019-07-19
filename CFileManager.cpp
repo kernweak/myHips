@@ -271,6 +271,9 @@ ScannerWorker(
 		case 8:
 			wcscpy_s(strOptions, 50, L"重命名键值");
 			break;
+		case 9:
+			wcscpy_s(strOptions, 50, L"进程创建");
+			break;
 		default:
 			wcscpy_s(strOptions, 50, L"爆炸");
 			break;
@@ -287,16 +290,25 @@ ScannerWorker(
 			break;
 		case 3:
 			tip.Format(L"进程:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
 		case 4:
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
 		case 5:
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n是否放行?", notification->ProcessPath, strOptions);
+			break;
 		case 6:
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
 		case 7:
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
 		case 8:
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
+		case 9:
+			tip.Format(L"父进程:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
 		default:
 			break;
 		}

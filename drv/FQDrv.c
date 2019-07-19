@@ -1473,6 +1473,21 @@ VOID MyCreateProcessNotifyEx
 	OBJECT_ATTRIBUTES oa = { 0 };
 	CLIENT_ID ClientId = { 0 };
 	char xxx[16] = { 0 };
+	ULONG Options = 0;//9进程创建
+	BOOLEAN isAllow = TRUE;//是否放行
+	PFQDRV_NOTIFICATION notification = NULL;
+	BOOLEAN SafeToOpen;
+	SafeToOpen = TRUE;
+	ULONG replyLength = 0;
+	notification = ExAllocatePoolWithTag(NonPagedPool,
+		sizeof(FQDRV_NOTIFICATION),
+		'nacS');
+	if (NULL == notification)
+	{
+		st = STATUS_INSUFFICIENT_RESOURCES;
+		return st;
+	}
+
 	if (CreateInfo != NULL)	//进程创建事件
 	{
 		DbgPrint("进程监控[%ld]%s创建进程: %wZ",
@@ -1480,6 +1495,39 @@ VOID MyCreateProcessNotifyEx
 			GetProcessNameByProcessId(CreateInfo->ParentProcessId),
 			CreateInfo->ImageFileName);
 		strcpy(xxx, PsGetProcessImageFileName(Process));
+		
+		notification->Operation = 9;
+		CHAR parentProcessName[MAX_PATH] = { 0 };
+		WCHAR wparentProcessName[MAX_PATH] = { 0 };
+		strcpy_s(parentProcessName,MAX_PATH,GetProcessNameByProcessId(CreateInfo->ParentProcessId));
+		CharToWchar(parentProcessName, wparentProcessName);
+		wcscpy_s(notification->ProcessPath, MAX_PATH, wparentProcessName);
+
+		char processName[MAX_PATH] = { 0 };
+		WCHAR wProcessName[MAX_PATH] = { 0 };
+		UnicodeToChar(CreateInfo->ImageFileName, processName);
+		CharToWchar(processName, wProcessName);
+		wcscpy_s(notification->TargetPath, MAX_PATH, wProcessName);
+		replyLength = sizeof(FQDRV_REPLY);
+		st = FltSendMessage(FQDRVData.Filter,
+			&FQDRVData.ClientPort,
+			notification,
+			sizeof(FQDRV_NOTIFICATION),
+			notification,
+			&replyLength,
+			NULL);
+		if (STATUS_SUCCESS == st) {
+
+			SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+			if (SafeToOpen)
+			{
+				CreateInfo->CreationStatus = STATUS_SUCCESS;
+			}
+			else {
+				CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;
+			}
+		}
+
 		if (!_stricmp(xxx, "mspaint.exe"))
 		{
 			DbgPrint("禁止创建画图进程！");
