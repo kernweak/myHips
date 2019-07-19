@@ -23,6 +23,11 @@ NTKERNELAPI NTSTATUS RtlUnicodeStringCopy
 	__in   PUNICODE_STRING SourceString
 );
 
+//进程监控相关
+NTKERNELAPI PCHAR PsGetProcessImageFileName(PEPROCESS Process);
+NTKERNELAPI NTSTATUS PsLookupProcessByProcessId(HANDLE ProcessId, PEPROCESS *Process);
+
+
 //
 //  Structure that contains all the global data structures
 //  used throughout the FQDRV.
@@ -158,14 +163,20 @@ DriverEntry(
 	g_LastDelFileName.Length = g_LastDelFileName.MaximumLength = MAX_PATH * 2;
 	memset(g_LastDelFileName.Buffer, '\0', MAX_PATH * 2);
 
-	//
-	//  Register with filter manager.
-	//
+	//注册表监控初始化
 	status = PtRegisterInit();
 	if (!NT_SUCCESS(status))
 	{
 		PtRegisterUnInit();
 	}
+	status = PtProcessInit();
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("初始化进程监控失败\n");
+		PtProcessUnInit();
+	}
+	
+
 	status = FltRegisterFilter(DriverObject,
 		&FilterRegistration,
 		&FQDRVData.Filter);
@@ -299,6 +310,7 @@ FQDRVUnload(
 
 	FltUnregisterFilter(FQDRVData.Filter);
 	PtRegisterUnInit();
+	PtProcessUnInit();
 	return STATUS_SUCCESS;
 }
 
@@ -609,7 +621,7 @@ FQDRVPreSetInforMation(
 				Options = 3;
 				break;
 			default:
-				Options = 0;//爆炸啦
+				Options = 0;//
 				break;
 			}
 			//判断是不是我们要监控的
@@ -1431,4 +1443,73 @@ NTSTATUS RegistryCallback
 	if (registryPath.Buffer != NULL)
 		ExFreePoolWithTag(registryPath.Buffer, REGISTRY_POOL_TAG);
 	return CallbackStatus;
+}
+
+
+
+PWCHAR GetProcessNameByProcessId(HANDLE ProcessId)
+{
+	NTSTATUS st = STATUS_UNSUCCESSFUL;
+	PEPROCESS ProcessObj = NULL;
+	PWCHAR string = NULL;
+	st = PsLookupProcessByProcessId(ProcessId, &ProcessObj);
+	if (NT_SUCCESS(st))
+	{
+		string = PsGetProcessImageFileName(ProcessObj);
+		ObfDereferenceObject(ProcessObj);
+	}
+	return string;
+}
+
+VOID MyCreateProcessNotifyEx
+(
+	__inout   PEPROCESS Process,
+	__in      HANDLE ProcessId,
+	__in_opt  PPS_CREATE_NOTIFY_INFO CreateInfo
+)
+{
+	NTSTATUS st = 0;
+	HANDLE hProcess = NULL;
+	OBJECT_ATTRIBUTES oa = { 0 };
+	CLIENT_ID ClientId = { 0 };
+	char xxx[16] = { 0 };
+	if (CreateInfo != NULL)	//进程创建事件
+	{
+		DbgPrint("进程监控[%ld]%s创建进程: %wZ",
+			CreateInfo->ParentProcessId,
+			GetProcessNameByProcessId(CreateInfo->ParentProcessId),
+			CreateInfo->ImageFileName);
+		strcpy(xxx, PsGetProcessImageFileName(Process));
+		if (!_stricmp(xxx, "mspaint.exe"))
+		{
+			DbgPrint("禁止创建画图进程！");
+			CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;	//禁止创建进程
+		}
+	}
+	else
+	{
+		DbgPrint("[monitor_create_process_x64]进程退出: %s", PsGetProcessImageFileName(Process));
+	}
+}
+
+
+NTSTATUS PtProcessInit()
+{
+	NTSTATUS status = 0;
+	status=PsSetCreateProcessNotifyRoutineEx((PCREATE_PROCESS_NOTIFY_ROUTINE_EX)MyCreateProcessNotifyEx, FALSE);
+	if (NT_SUCCESS(status))
+		DbgPrint("进程监控开启 SUCCESS!");
+	else
+		DbgPrint("进程监控开启 Failed!");
+	return status;
+}
+NTSTATUS PtProcessUnInit()
+{
+	NTSTATUS status = 0;
+	status = PsSetCreateProcessNotifyRoutineEx((PCREATE_PROCESS_NOTIFY_ROUTINE_EX)MyCreateProcessNotifyEx, TRUE);
+	if (NT_SUCCESS(status))
+		DbgPrint("进程监控关闭 SUCCESS!");
+	else
+		DbgPrint("进程监控关闭 Failed!");
+	return status;
 }

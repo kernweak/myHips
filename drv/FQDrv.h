@@ -220,5 +220,22 @@ NTSTATUS RegistryCallback
 	IN PVOID Argument2//操作的结构体指针
 );
 
+
+//进程相关
+PWCHAR GetProcessNameByProcessId(HANDLE ProcessId);
+VOID MyCreateProcessNotifyEx(
+	__inout   PEPROCESS Process,
+	__in      HANDLE ProcessId,
+	__in_opt  PPS_CREATE_NOTIFY_INFO CreateInfo
+);
+
+VOID MyCreateProcessNotifyEx
+(
+	__inout   PEPROCESS Process,
+	__in      HANDLE ProcessId,
+	__in_opt  PPS_CREATE_NOTIFY_INFO CreateInfo
+);
+NTSTATUS PtProcessInit();
+NTSTATUS PtProcessUnInit();
 #endif /* __FQDRV_H__ */
 
