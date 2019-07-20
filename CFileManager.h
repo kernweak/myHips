@@ -81,7 +81,7 @@ typedef enum _IOMONITOR_COMMAND {
 //void ModifyPathList(wchar_t * filename);
 //读取文件内容
 //void ReadPath();
-
+WCHAR* NopEnter(WCHAR* str);  // 此处代码是抄的,  但是比较 好懂.
 //与驱动通讯
 HRESULT SendToDriver(LPVOID lpInBuffer, DWORD dwInBufferSize);
 
@@ -104,3 +104,5 @@ void RenewRegMon();
 
 extern pFileRule g_fileRule;
 extern pFileRule g_ProcessRule;
+
+bool addDefaultProcessRule();

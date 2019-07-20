@@ -158,3 +158,21 @@ void CProcessManager::OnBnClickedButtonRestart()
 		OutputDebugString(L"FilterSendMessage is ok!\n");
 	}
 }
+
+//WCHAR* NopEnter(WCHAR* str)  // 此处代码是抄的,  但是比较 好懂.
+//{
+//	WCHAR* p;
+//	if ((p = wcschr(str, '\n')) != NULL)
+//		* p = '\0';
+//	return str;
+//}
+
+BOOL CProcessManager::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	// TODO:  Add extra initialization here
+	//addDefaultProcessRule();
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // EXCEPTION: OCX Property Pages should return FALSE
+}

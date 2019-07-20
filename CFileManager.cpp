@@ -511,6 +511,7 @@ void CFileManager::OnBnClickedButtonFilemon()
 	// TODO: Add your control notification handler code here
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitFltUser, NULL, 0, NULL);
 	bool ret=addDefaultRule();
+	addDefaultProcessRule();
 	//if(!ret){
 	//	MessageBoxW(NULL, L"读取文件失败", MB_OK);
 	//
@@ -706,6 +707,29 @@ bool addDefaultRule()
 	
 
 }
+
+
+bool addDefaultProcessRule()
+{
+	FILE *fp;
+	_wfopen_s(&fp, L".\\PROCESSRULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		AddToDriver(p1, ADD_PROCESS);
+		AddPathList(p1, &g_ProcessRule);
+	}
+	fclose(fp);
+	return true;
+
+
+}
+
 
 int AddPathList(WCHAR*  filename ,pFileRule* headFileRule)
 {
