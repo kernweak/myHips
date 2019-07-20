@@ -4,7 +4,7 @@
 #include "commonStruct.h"
 #include "FQDrv.h"
 #include "commonFun.h"
-
+#include <ntimage.h>
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
 //注册表相关
 #define REGISTRY_POOL_TAG 'pRE'
@@ -40,9 +40,11 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //
 pFilenames m_pfilenames=NULL;//文件规则链表
 pFilenames m_pProcessNames = NULL;//进程规则链表
+pFilenames m_pMoudleNames = NULL;//模块规则链表
 ULONG isOpenFilter = 1;
 ULONG isOpenReg = 1;
 ULONG isOpenProcess = 1;
+ULONG isOpenModule = 1;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -177,7 +179,12 @@ DriverEntry(
 		DbgPrint("初始化进程监控失败\n");
 		PtProcessUnInit();
 	}
-	
+	status = PtModuleInit();
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("初始化模块失败\n");
+		PtProcessUnInit();
+	}
 
 	status = FltRegisterFilter(DriverObject,
 		&FilterRegistration,
@@ -313,6 +320,7 @@ FQDRVUnload(
 	FltUnregisterFilter(FQDRVData.Filter);
 	PtRegisterUnInit();
 	PtProcessUnInit();
+	PtModuleUnInit();
 	return STATUS_SUCCESS;
 }
 
@@ -958,6 +966,20 @@ NTSTATUS MessageNotifyCallback(
 		isOpenProcess = 1;
 		uResult = MRESTART_PROCESS;
 		break;
+	case ADD_MODULE:
+		uResult = AddPathList(&cachePath, &m_pMoudleNames);
+		break;
+	case DELETE_MODULE:
+		uResult = DeletePathList(&cachePath, &m_pMoudleNames);
+		break;
+	case PAUSE_MODULE:
+		isOpenModule = 0;
+		uResult = MPAUSE_MODULE;
+		break;
+	case RESTART_MODULE:
+		isOpenModule = 1;
+		uResult = MRESTART_MODULE;
+		break;
 	default:
 		break;
 	}
@@ -1013,6 +1035,13 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case MRESTART_PROCESS:
 		wcscpy_s(buffer, wcslen(L"RESTART_PROCESS") + 1, L"RESTART_PROCESS");
+		break;
+	case MPAUSE_MODULE:
+		wcscpy_s(buffer, wcslen(L"PAUSE_MODULE") + 1, L"PAUSE_MODULE");
+		break;
+	case MRESTART_MODULE:
+		wcscpy_s(buffer, wcslen(L"RESTART_MODULE") + 1, L"RESTART_MODULE");
+		break;
 	default:
 		break;
 	}
@@ -1634,4 +1663,180 @@ NTSTATUS PtProcessUnInit()
 	else
 		DbgPrint("进程监控关闭 Failed!");
 	return status;
+}
+
+//模块加载相关
+NTSTATUS RtlSuperCopyMemory(IN VOID UNALIGNED *Dst,
+	IN CONST VOID UNALIGNED *Src,
+	IN ULONG Length)
+{
+	//MDL是一个对物理内存的描述，负责把虚拟内存映射到物理内存
+	PMDL pmdl = IoAllocateMdl(Dst, Length, 0, 0, NULL);//分配mdl
+	if (pmdl == NULL)
+		return STATUS_UNSUCCESSFUL;
+
+	MmBuildMdlForNonPagedPool(pmdl);//build mdl
+	unsigned int *Mapped = (unsigned int *)MmMapLockedPages(pmdl, KernelMode);//锁住内存
+	if (!Mapped) {
+		IoFreeMdl(pmdl);
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	KIRQL kirql = KeRaiseIrqlToDpcLevel();
+	RtlCopyMemory(Mapped, Src, Length);
+	KeLowerIrql(kirql);
+
+	MmUnmapLockedPages((PVOID)Mapped, pmdl);
+	IoFreeMdl(pmdl);
+
+	return STATUS_SUCCESS;
+}
+
+
+void DenyLoadDriver(PVOID DriverEntry)
+{
+	UCHAR fuck[] = "\xB8\x22\x00\x00\xC0\xC3";
+	RtlSuperCopyMemory(DriverEntry, fuck, sizeof(fuck));
+}
+
+
+PVOID GetDriverEntryByImageBase(PVOID ImageBase)
+{
+	PIMAGE_DOS_HEADER pDOSHeader;
+	PIMAGE_NT_HEADERS64 pNTHeader;
+	PVOID pEntryPoint;
+	pDOSHeader = (PIMAGE_DOS_HEADER)ImageBase;
+	pNTHeader = (PIMAGE_NT_HEADERS64)((ULONG64)ImageBase + pDOSHeader->e_lfanew);
+	pEntryPoint = (PVOID)((ULONG64)ImageBase + pNTHeader->OptionalHeader.AddressOfEntryPoint);
+	return pEntryPoint;
+}
+
+VOID LoadImageNotifyRoutine
+(
+	__in_opt PUNICODE_STRING  FullImageName,
+	__in HANDLE  ProcessId,
+	__in PIMAGE_INFO  ImageInfo
+)
+{
+	if (isOpenModule) {
+		PVOID pDrvEntry;
+		char szFullImageName[260] = { 0 };
+		ULONG Options = 0;//10模块加载
+		BOOLEAN isAllow = TRUE;//是否放行
+		PFQDRV_NOTIFICATION notification = NULL;
+		BOOLEAN SafeToOpen;
+		SafeToOpen = TRUE;
+		BOOLEAN scanFile;
+		ULONG replyLength = 0;
+		NTSTATUS st = 0;
+		if (FullImageName != NULL && MmIsAddressValid(FullImageName))
+		{
+			if (ProcessId == 0)
+			{
+				notification = ExAllocatePoolWithTag(NonPagedPool,
+					sizeof(FQDRV_NOTIFICATION),
+					'nacS');
+				DbgPrint("[LoadImageNotifyX64]%wZ\n", FullImageName);
+				pDrvEntry = GetDriverEntryByImageBase(ImageInfo->ImageBase);
+				DbgPrint("[LoadImageNotifyX64]DriverEntry: %p\n", pDrvEntry);
+				UnicodeToChar(FullImageName, szFullImageName);
+				WCHAR newPath1[MAX_PATH] = { 0 };
+
+				CharToWchar(szFullImageName, newPath1);
+				//searchModuleRule(WCHAR *path, pFilenames *headFilenames);
+				//if (strstr(szFullImageName, "myTestDriver.sys"))
+				if (searchModuleRule(newPath1, &m_pMoudleNames))
+				{
+					//DbgPrint("Deny load [DelDir.sys]");
+					//禁止加载win64ast.sys
+					notification->Operation = 10;
+					wcscpy_s(notification->ProcessPath, MAX_PATH, newPath1);
+
+
+					replyLength = sizeof(FQDRV_REPLY);
+					st = FltSendMessage(FQDRVData.Filter,
+						&FQDRVData.ClientPort,
+						notification,
+						sizeof(FQDRV_NOTIFICATION),
+						notification,
+						&replyLength,
+						NULL);
+
+					if (STATUS_SUCCESS == st) {
+
+						SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+						if (SafeToOpen)
+						{
+							DbgPrint("同意模块加载\n");
+						}
+						else {
+							DenyLoadDriver(pDrvEntry);
+						}
+					}
+
+
+				}
+				else {
+					DbgPrint("没匹配上");
+				}
+
+				if (NULL != notification) {
+
+					ExFreePoolWithTag(notification, 'nacS');
+				}
+			}
+		}
+	}
+}
+
+NTSTATUS PtModuleInit()
+{
+	NTSTATUS status = 0;
+	status = PsSetLoadImageNotifyRoutine((PLOAD_IMAGE_NOTIFY_ROUTINE)LoadImageNotifyRoutine);
+	if (NT_SUCCESS(status))
+		DbgPrint("模块监控开启 SUCCESS!");
+	else
+		DbgPrint("模块监控开启 Failed!");
+	return status;
+}
+NTSTATUS PtModuleUnInit()
+{
+	NTSTATUS status = 0;
+	status = PsRemoveLoadImageNotifyRoutine((PLOAD_IMAGE_NOTIFY_ROUTINE)LoadImageNotifyRoutine);
+	if (NT_SUCCESS(status))
+		DbgPrint("模块监控关闭 SUCCESS!");
+	else
+		DbgPrint("模块监控关闭 Failed!");
+	return status;
+}
+
+
+
+BOOLEAN searchModuleRule(WCHAR *path, pFilenames *headFilenames)
+{
+	filenames *current;
+	current = *headFilenames;
+	WCHAR tmpPath[MAX_PATH] = { 0 };
+	while (current != NULL)
+	{
+		__try {
+			WCHAR tmp[MAX_PATH] = { 0 };
+			wcsncpy_s(tmp, current->filename.Length, current->filename.Buffer, current->filename.Length);
+			//ToUpperString(tmp);
+			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
+			//if (strstr(szFullImageName, "myTestDriver.sys"))
+			DbgPrint("tmp %ls/n", tmp);
+			DbgPrint("path %ls/n", path);
+			if (wcsstr(path, tmp))
+			{
+				return TRUE;
+			}
+			current = current->pNext;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return FALSE;
+		}
+	}
+	return FALSE;
 }

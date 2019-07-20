@@ -125,14 +125,14 @@ BOOL CFQHIPSDlg::OnInitDialog()
 
 	//为tabControl添加标签
 	m_tabCtrl.InsertItem(0, _T("日志管理"));
-	m_tabCtrl.InsertItem(1, _T("主动防御"));
+	m_tabCtrl.InsertItem(1, _T("模块监控"));
 	m_tabCtrl.InsertItem(2, _T("文件管理"));
 	m_tabCtrl.InsertItem(3, _T("注册表管理"));
 	m_tabCtrl.InsertItem(4, _T("进程管理"));
 	m_tabCtrl.InsertItem(5, _T("防火墙"));
 	m_tabCtrl.InsertItem(6, _T("Ark功能"));
 	m_tabCtrl.InsertItem(7, _T("其他功能"));
-	m_tabCtrl.SetPadding(19);
+	m_tabCtrl.SetPadding(10);
 	m_tabCtrl.SetMinTabWidth(50);
 	m_tabCtrl.SetItemSize(CSize(50, 25));
 	//创建子对话框

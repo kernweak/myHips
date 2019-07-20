@@ -20,4 +20,12 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
 
 	DECLARE_MESSAGE_MAP()
+public:
+	CString m_ModuleRule;
+	CString m_ruleState;
+	afx_msg void OnBnClickedButtonAddrule();
+	afx_msg void OnBnClickedButtonDelrule();
+	afx_msg void OnBnClickedButtonPausemoudle();
+	afx_msg void OnBnClickedButtonRestartmoudle();
 };
+bool writeToMoudleMonFile();

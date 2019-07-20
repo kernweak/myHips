@@ -74,6 +74,11 @@ typedef enum _IOMONITOR_COMMAND {
 	DELETE_PROCESS,
 	PAUSE_PROCESS,
 	RESTART_PROCESS,
+	DEFAULT_MODULE,
+	ADD_MODULE,
+	DELETE_MODULE,
+	PAUSE_MODULE,
+	RESTART_MODULE,
 } IOMonitorCommand;
 
 
@@ -104,5 +109,7 @@ void RenewRegMon();
 
 extern pFileRule g_fileRule;
 extern pFileRule g_ProcessRule;
+extern pFileRule g_ModuleRule;
 
 bool addDefaultProcessRule();
+bool addDefaultModuleRule();

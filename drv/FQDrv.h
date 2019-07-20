@@ -44,6 +44,11 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
 	DELETE_PROCESS,
 	PAUSE_PROCESS,
 	RESTART_PROCESS,
+	DEFAULT_MODULE,
+	ADD_MODULE,
+	DELETE_MODULE,
+	PAUSE_MODULE,
+	RESTART_MODULE,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -59,6 +64,9 @@ typedef enum _result {  //操作命令
 	MRESTART_REGMON,
 	MPAUSE_PROCESS,
 	MRESTART_PROCESS,
+	MPAUSE_MODULE,
+	MRESTART_MODULE,
+
 } RuleResult;
 
 typedef struct filenames {      //路径链表结点
@@ -245,5 +253,17 @@ VOID MyCreateProcessNotifyEx
 NTSTATUS PtProcessInit();
 NTSTATUS PtProcessUnInit();
 BOOLEAN searchProcessRule(WCHAR *path, pFilenames *headFilenames);
-#endif /* __FQDRV_H__ */
 
+
+void DenyLoadDriver(PVOID DriverEntry);
+PVOID GetDriverEntryByImageBase(PVOID ImageBase);
+VOID LoadImageNotifyRoutine
+(
+	__in_opt PUNICODE_STRING  FullImageName,
+	__in HANDLE  ProcessId,
+	__in PIMAGE_INFO  ImageInfo
+);
+NTSTATUS PtModuleInit();
+NTSTATUS PtModuleUnInit();
+BOOLEAN searchModuleRule(WCHAR *path, pFilenames *headFilenames);
+#endif /* __FQDRV_H__ */

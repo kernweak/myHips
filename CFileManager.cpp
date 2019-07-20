@@ -35,7 +35,7 @@
 HANDLE g_port = 0;
 pFileRule g_fileRule = NULL;
 pFileRule g_ProcessRule = NULL;
-
+pFileRule g_ModuleRule = NULL;
 typedef struct _SCANNER_THREAD_CONTEXT {
 
 	HANDLE Port;
@@ -276,6 +276,9 @@ ScannerWorker(
 		case 9:
 			wcscpy_s(strOptions, 50, L"进程创建");
 			break;
+		case 10:
+			wcscpy_s(strOptions, 50, L"模块加载");
+			break;
 		default:
 			wcscpy_s(strOptions, 50, L"爆炸");
 			break;
@@ -309,7 +312,10 @@ ScannerWorker(
 			tip.Format(L"注册表路径:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
 			break;
 		case 9:
-			tip.Format(L"父进程:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			tip.Format(L"进程监控:%s\r\n操作:%s\r\n目标:%s\r\n是否放行?", notification->ProcessPath, strOptions, notification->TargetPath);
+			break;
+		case 10:
+			tip.Format(L"模块监控:%s\r\n操作:%s\r\n是否放行?", notification->ProcessPath, strOptions);
 			break;
 		default:
 			break;
@@ -512,6 +518,7 @@ void CFileManager::OnBnClickedButtonFilemon()
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitFltUser, NULL, 0, NULL);
 	bool ret=addDefaultRule();
 	addDefaultProcessRule();
+	addDefaultModuleRule();
 	//if(!ret){
 	//	MessageBoxW(NULL, L"读取文件失败", MB_OK);
 	//
@@ -723,6 +730,26 @@ bool addDefaultProcessRule()
 		p1 = NopEnter(p);
 		AddToDriver(p1, ADD_PROCESS);
 		AddPathList(p1, &g_ProcessRule);
+	}
+	fclose(fp);
+	return true;
+
+
+}
+bool addDefaultModuleRule()
+{
+	FILE *fp;
+	_wfopen_s(&fp, L".\\MODULERULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		AddToDriver(p1, ADD_MODULE);
+		AddPathList(p1, &g_ModuleRule);
 	}
 	fclose(fp);
 	return true;
