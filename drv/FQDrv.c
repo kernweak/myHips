@@ -42,6 +42,7 @@ pFilenames m_pfilenames=NULL;//文件规则链表
 pFilenames m_pProcessNames = NULL;//进程规则链表
 ULONG isOpenFilter = 1;
 ULONG isOpenReg = 1;
+ULONG isOpenProcess = 1;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -949,6 +950,14 @@ NTSTATUS MessageNotifyCallback(
 	case DELETE_PROCESS:
 		uResult = DeletePathList(&cachePath, &m_pProcessNames);
 		break;
+	case PAUSE_PROCESS:
+		isOpenProcess = 0;
+		uResult = MPAUSE_PROCESS;
+		break;
+	case RESTART_PROCESS:
+		isOpenProcess = 1;
+		uResult = MRESTART_PROCESS;
+		break;
 	default:
 		break;
 	}
@@ -999,6 +1008,11 @@ NTSTATUS MessageNotifyCallback(
 	case MRESTART_REGMON:
 		wcscpy_s(buffer, wcslen(L"RESTART_REGMON") + 1, L"RESTART_REGMON");
 		break;
+	case MPAUSE_PROCESS:
+		wcscpy_s(buffer, wcslen(L"PAUSE_PROCESS") + 1, L"PAUSE_PROCESS");
+		break;
+	case MRESTART_PROCESS:
+		wcscpy_s(buffer, wcslen(L"RESTART_PROCESS") + 1, L"RESTART_PROCESS");
 	default:
 		break;
 	}
@@ -1517,86 +1531,87 @@ VOID MyCreateProcessNotifyEx
 	__in_opt  PPS_CREATE_NOTIFY_INFO CreateInfo
 )
 {
-	NTSTATUS st = 0;
-	HANDLE hProcess = NULL;
-	OBJECT_ATTRIBUTES oa = { 0 };
-	CLIENT_ID ClientId = { 0 };
-	char xxx[16] = { 0 };
-	ULONG Options = 0;//9进程创建
-	BOOLEAN isAllow = TRUE;//是否放行
-	PFQDRV_NOTIFICATION notification = NULL;
-	BOOLEAN SafeToOpen;
-	SafeToOpen = TRUE;
-	BOOLEAN scanFile;
-	scanFile = TRUE;
-	ULONG replyLength = 0;
-	notification = ExAllocatePoolWithTag(NonPagedPool,
-		sizeof(FQDRV_NOTIFICATION),
-		'nacS');
-	if (NULL == notification)
-	{
-		st = STATUS_INSUFFICIENT_RESOURCES;
-		return st;
-	}
+	if (isOpenProcess) {
+		NTSTATUS st = 0;
+		HANDLE hProcess = NULL;
+		OBJECT_ATTRIBUTES oa = { 0 };
+		CLIENT_ID ClientId = { 0 };
+		char xxx[16] = { 0 };
+		ULONG Options = 0;//9进程创建
+		BOOLEAN isAllow = TRUE;//是否放行
+		PFQDRV_NOTIFICATION notification = NULL;
+		BOOLEAN SafeToOpen;
+		SafeToOpen = TRUE;
+		BOOLEAN scanFile;
+		scanFile = TRUE;
+		ULONG replyLength = 0;
+		notification = ExAllocatePoolWithTag(NonPagedPool,
+			sizeof(FQDRV_NOTIFICATION),
+			'nacS');
+		if (NULL == notification)
+		{
+			st = STATUS_INSUFFICIENT_RESOURCES;
+			return st;
+		}
 
-	if (CreateInfo != NULL)	//进程创建事件
-	{
-		DbgPrint("进程监控[%ld]%s创建进程: %wZ",
-			CreateInfo->ParentProcessId,
-			GetProcessNameByProcessId(CreateInfo->ParentProcessId),
-			CreateInfo->ImageFileName);
-		strcpy(xxx, PsGetProcessImageFileName(Process));
+		if (CreateInfo != NULL)	//进程创建事件
+		{
+			DbgPrint("进程监控[%ld]%s创建进程: %wZ",
+				CreateInfo->ParentProcessId,
+				GetProcessNameByProcessId(CreateInfo->ParentProcessId),
+				CreateInfo->ImageFileName);
+			strcpy(xxx, PsGetProcessImageFileName(Process));
 
-		WCHAR tmp[256] = { 0 };
-		CharToWchar(PsGetProcessImageFileName(Process), tmp);
+			WCHAR tmp[256] = { 0 };
+			CharToWchar(PsGetProcessImageFileName(Process), tmp);
 
-		scanFile = searchProcessRule(tmp, &m_pProcessNames);
-		if (scanFile) {
+			scanFile = searchProcessRule(tmp, &m_pProcessNames);
+			if (scanFile) {
 
-			notification->Operation = 9;
-			CHAR parentProcessName[MAX_PATH] = { 0 };
-			WCHAR wparentProcessName[MAX_PATH] = { 0 };
-			strcpy_s(parentProcessName, MAX_PATH, GetProcessNameByProcessId(CreateInfo->ParentProcessId));
-			CharToWchar(parentProcessName, wparentProcessName);
-			wcscpy_s(notification->ProcessPath, MAX_PATH, wparentProcessName);
+				notification->Operation = 9;
+				CHAR parentProcessName[MAX_PATH] = { 0 };
+				WCHAR wparentProcessName[MAX_PATH] = { 0 };
+				strcpy_s(parentProcessName, MAX_PATH, GetProcessNameByProcessId(CreateInfo->ParentProcessId));
+				CharToWchar(parentProcessName, wparentProcessName);
+				wcscpy_s(notification->ProcessPath, MAX_PATH, wparentProcessName);
 
-			char processName[MAX_PATH] = { 0 };
-			WCHAR wProcessName[MAX_PATH] = { 0 };
-			UnicodeToChar(CreateInfo->ImageFileName, processName);
-			CharToWchar(processName, wProcessName);
-			wcscpy_s(notification->TargetPath, MAX_PATH, wProcessName);
-			replyLength = sizeof(FQDRV_REPLY);
-			st = FltSendMessage(FQDRVData.Filter,
-				&FQDRVData.ClientPort,
-				notification,
-				sizeof(FQDRV_NOTIFICATION),
-				notification,
-				&replyLength,
-				NULL);
-			if (STATUS_SUCCESS == st) {
+				char processName[MAX_PATH] = { 0 };
+				WCHAR wProcessName[MAX_PATH] = { 0 };
+				UnicodeToChar(CreateInfo->ImageFileName, processName);
+				CharToWchar(processName, wProcessName);
+				wcscpy_s(notification->TargetPath, MAX_PATH, wProcessName);
+				replyLength = sizeof(FQDRV_REPLY);
+				st = FltSendMessage(FQDRVData.Filter,
+					&FQDRVData.ClientPort,
+					notification,
+					sizeof(FQDRV_NOTIFICATION),
+					notification,
+					&replyLength,
+					NULL);
+				if (STATUS_SUCCESS == st) {
 
-				SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
-				if (SafeToOpen)
-				{
-					CreateInfo->CreationStatus = STATUS_SUCCESS;
+					SafeToOpen = ((PFQDRV_REPLY)notification)->SafeToOpen;
+					if (SafeToOpen)
+					{
+						CreateInfo->CreationStatus = STATUS_SUCCESS;
+					}
+					else {
+						CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;
+					}
 				}
-				else {
-					CreateInfo->CreationStatus = STATUS_UNSUCCESSFUL;
-				}
+
 			}
+		}
+		else
+		{
+			DbgPrint("[monitor_create_process_x64]进程退出: %s", PsGetProcessImageFileName(Process));
+		}
 
+		if (NULL != notification) {
+
+			ExFreePoolWithTag(notification, 'nacS');
 		}
 	}
-	else
-	{
-		DbgPrint("[monitor_create_process_x64]进程退出: %s", PsGetProcessImageFileName(Process));
-	}
-
-	if (NULL != notification) {
-
-		ExFreePoolWithTag(notification, 'nacS');
-	}
-
 }
 
 

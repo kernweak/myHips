@@ -42,6 +42,8 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
 	DEFAULT_PROCESS,
 	ADD_PROCESS,
 	DELETE_PROCESS,
+	PAUSE_PROCESS,
+	RESTART_PROCESS,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -55,6 +57,8 @@ typedef enum _result {  //操作命令
 	RESTART_FILEMON,
 	MPAUSE_REGMON,
 	MRESTART_REGMON,
+	MPAUSE_PROCESS,
+	MRESTART_PROCESS,
 } RuleResult;
 
 typedef struct filenames {      //路径链表结点

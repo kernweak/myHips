@@ -35,6 +35,8 @@ void CProcessManager::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CProcessManager, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_ADD, &CProcessManager::OnBnClickedButtonAdd)
 	ON_BN_CLICKED(IDC_BUTTON_DEL, &CProcessManager::OnBnClickedButtonDel)
+	ON_BN_CLICKED(IDC_BUTTON_PAUSE, &CProcessManager::OnBnClickedButtonPause)
+	ON_BN_CLICKED(IDC_BUTTON_RESTART, &CProcessManager::OnBnClickedButtonRestart)
 END_MESSAGE_MAP()
 
 
@@ -112,4 +114,47 @@ void CProcessManager::OnBnClickedButtonDel()
 	}
 	UpdateData(FALSE);
 	writeToFile();
+}
+
+
+void CProcessManager::OnBnClickedButtonPause()
+{
+	// TODO: Add your control notification handler code here
+	Data data;
+	void *pData = NULL;
+
+	data.command = PAUSE_PROCESS;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
+}
+
+
+void CProcessManager::OnBnClickedButtonRestart()
+{
+	// TODO: Add your control notification handler code here
+	Data data;
+	void *pData = NULL;
+
+	data.command = RESTART_PROCESS;
+
+	pData = &data.command;
+
+	HRESULT hResult = SendToDriver(pData, sizeof(data));
+	if (IS_ERROR(hResult)) {
+		OutputDebugString(L"FilterSendMessage fail!\n");
+	}
+	else
+	{
+
+		OutputDebugString(L"FilterSendMessage is ok!\n");
+	}
 }

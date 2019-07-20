@@ -25,6 +25,8 @@ public:
 	afx_msg void OnBnClickedButtonAdd();
 	CString m_ruleState;
 	afx_msg void OnBnClickedButtonDel();
+	afx_msg void OnBnClickedButtonPause();
+	afx_msg void OnBnClickedButtonRestart();
 };
 
 bool writeToProcessMonFile();
