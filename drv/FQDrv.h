@@ -49,6 +49,7 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
 	DELETE_MODULE,
 	PAUSE_MODULE,
 	RESTART_MODULE,
+	DELETE_FILE,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -73,6 +74,19 @@ typedef struct filenames {      //路径链表结点
     UNICODE_STRING filename;
     struct filenames* pNext;
 }filenames,*pFilenames;
+
+//删除文件相关
+//定义LIST_ENTRY
+typedef struct _FILE_LIST_ENTRY {
+	LIST_ENTRY ENTRY;
+	PWSTR NameBuffer;
+}FILE_LIST_ENTRY, *PFILE_LIST_ENTRY;
+
+
+
+//保存文件信息的结构体
+
+
 
 //void ModifyPathList(PUNICODE_STRING  filename);  //之前把添加和删除在一个函数实现的，这个路径存在就默认为删除命令，不存在就默认本次为添加命令（因为懒得解析结构体，只发一个路径），后来感觉还是不合适，就分开了
 
@@ -266,4 +280,8 @@ VOID LoadImageNotifyRoutine
 NTSTATUS PtModuleInit();
 NTSTATUS PtModuleUnInit();
 BOOLEAN searchModuleRule(WCHAR *path, pFilenames *headFilenames);
+
+//删除文件相关
+NTSTATUS myDelFile(const WCHAR* fileName);
+NTSTATUS myDelFileDir(const WCHAR * directory);
 #endif /* __FQDRV_H__ */

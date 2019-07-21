@@ -31,6 +31,8 @@ public:
 	afx_msg void OnBnClickedButtonPause();
 	afx_msg void OnBnClickedButtonRestart();
 	CString m_ruleState;
+	virtual BOOL OnInitDialog();
+	afx_msg void OnBnClickedButtonDelfile();
 };
 
 const PWSTR FQDRVPortName = L"\\FQDRVPort";
@@ -79,6 +81,7 @@ typedef enum _IOMONITOR_COMMAND {
 	DELETE_MODULE,
 	PAUSE_MODULE,
 	RESTART_MODULE,
+	DELETE_FILE,
 } IOMonitorCommand;
 
 

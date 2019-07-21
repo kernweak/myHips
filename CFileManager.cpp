@@ -91,6 +91,7 @@ BEGIN_MESSAGE_MAP(CFileManager, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_DEL, &CFileManager::OnBnClickedButtonDel)
 	ON_BN_CLICKED(IDC_BUTTON_PAUSE, &CFileManager::OnBnClickedButtonPause)
 	ON_BN_CLICKED(IDC_BUTTON_RESTART, &CFileManager::OnBnClickedButtonRestart)
+	ON_BN_CLICKED(IDC_BUTTON_DELFILE, &CFileManager::OnBnClickedButtonDelfile)
 END_MESSAGE_MAP()
 
 
@@ -900,4 +901,25 @@ void RenewRegMon()
 	{
 		OutputDebugString(L"FilterSendMessage is ok!\n");
 	}
+}
+
+BOOL CFileManager::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	// TODO:  Add extra initialization here
+	ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
+	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);       // 0x0049 == WM_COPYGLOBALDATA
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // EXCEPTION: OCX Property Pages should return FALSE
+}
+
+
+void CFileManager::OnBnClickedButtonDelfile()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(TRUE);
+	WCHAR * p = m_szPath.GetBuffer();
+	DeleteFromDriver(p, DELETE_FILE);
 }

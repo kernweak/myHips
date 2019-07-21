@@ -43,6 +43,8 @@
 #define IDC_BUTTON_RESTARTMOUDLE        1034
 #define IDC_BUTTON_ADDRULE              1036
 #define IDC_BUTTON_DELRULE              1037
+#define IDC_BUTTON1                     1038
+#define IDC_BUTTON_DELFILE              1038
 #define ID_32771                        32771
 #define ID_TRAY_REST                    32772
 #define ID_TRAY_RESTORE                 32773
@@ -55,7 +57,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        151
 #define _APS_NEXT_COMMAND_VALUE         32776
-#define _APS_NEXT_CONTROL_VALUE         1038
+#define _APS_NEXT_CONTROL_VALUE         1039
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
