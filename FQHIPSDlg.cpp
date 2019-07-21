@@ -124,7 +124,7 @@ BOOL CFQHIPSDlg::OnInitDialog()
 
 
 	//为tabControl添加标签
-	m_tabCtrl.InsertItem(0, _T("日志管理"));
+	m_tabCtrl.InsertItem(0, _T("程序引导"));
 	m_tabCtrl.InsertItem(1, _T("模块监控"));
 	m_tabCtrl.InsertItem(2, _T("文件管理"));
 	m_tabCtrl.InsertItem(3, _T("注册表管理"));

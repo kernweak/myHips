@@ -80,6 +80,7 @@ void CFileManager::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_FILEPATH, m_szPath);
 	DDX_Text(pDX, IDC_EDIT_RULE, m_rule);
 	DDX_Text(pDX, IDC_EDIT1, m_ruleState);
+	DDX_Control(pDX, IDC_LIST_FILEMON, m_listCtrl);
 }
 
 
@@ -627,7 +628,13 @@ void CFileManager::OnBnClickedButtonAdd()
 	UpdateData(TRUE);
 	WCHAR * p = m_rule.GetBuffer();
 	AddToDriver(p,ADD_PATH);
+	int iLine = 0;
 	int ret=AddPathList(p,&g_fileRule);
+	if (ret)
+	{
+		iLine = m_listCtrl.GetItemCount();
+		m_listCtrl.InsertItem(iLine, p);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -654,6 +661,20 @@ void CFileManager::OnBnClickedButtonDel()
 	DeleteFromDriver(p,DELETE_PATH);
 
 	int ret = DeletePathList(p,&g_fileRule);
+	int iLine = 0;
+	if (ret == 1)
+	{
+		while (m_listCtrl.DeleteItem(0));
+		pFileRule new_filename, current, precurrent;
+		current = precurrent = g_fileRule;
+		while (current != NULL)
+		{
+			int iLine = m_listCtrl.GetItemCount();
+			m_listCtrl.InsertItem(iLine, current->filePath);
+			current = current->pNext;
+		}
+		UpdateData(FALSE);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -703,12 +724,13 @@ bool addDefaultRule()
 		return FALSE;
 	while (!feof(fp))
 	{
+		int ret = 0;
 		WCHAR p[MAX_PATH] = { 0 };
 		WCHAR *p1;
 		fgetws(p, MAX_PATH, fp);
 		p1 = NopEnter(p);		
 		AddToDriver(p1,ADD_PATH);
-		AddPathList(p1,&g_fileRule);
+		ret=AddPathList(p1,&g_fileRule);
 	}
 	fclose(fp);
 	return true;
@@ -840,6 +862,10 @@ int DeletePathList(WCHAR*  filename, pFileRule* headFileRule)
 	return 2;
 }
 
+
+
+
+
 bool writeToFile()
 {
 	FILE *fp;
@@ -911,6 +937,25 @@ BOOL CFileManager::OnInitDialog()
 	ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
 	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);       // 0x0049 == WM_COPYGLOBALDATA
 
+	m_listCtrl.SetExtendedStyle(LVS_EX_FULLROWSELECT);
+	m_listCtrl.InsertColumn(0, _T("文件监控规则"), LVCFMT_LEFT, 240);
+	FILE *fp;
+	int iLine = 0;
+	_wfopen_s(&fp, L".\\FILERULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		int ret = 0;
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		AddToDriver(p1, ADD_PATH);
+		m_listCtrl.InsertItem(iLine, p1);
+	}
+	fclose(fp);
+
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // EXCEPTION: OCX Property Pages should return FALSE
 }
@@ -923,3 +968,5 @@ void CFileManager::OnBnClickedButtonDelfile()
 	WCHAR * p = m_szPath.GetBuffer();
 	DeleteFromDriver(p, DELETE_FILE);
 }
+
+

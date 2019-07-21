@@ -802,14 +802,8 @@ FQDRVpScanFileInUserMode(
 			//	leave;
 			//}
 
-		}
-
-		if (Operation == 3)
-		{
 			wcsncpy(g_LastDelFileName.Buffer, nameInfo->Name.Buffer, nameInfo->Name.MaximumLength);
 		}
-		//12345
-		//wcsncpy(notification->TargetPath, nameInfo->Name.Buffer, nameInfo->Name.MaximumLength);
 		WCHAR tmp3[MAX_PATH] = { 0 };
 		wcsncpy_s(tmp3, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
 
@@ -1020,16 +1014,6 @@ NTSTATUS MessageNotifyCallback(
 	}
 	
 	////释放内存
-	//ExFreePool(cachePath.Buffer);
-	//cachePath.Buffer = NULL;
-	//cachePath.Length = cachePath.MaximumLength = 0;
-	//
-	////打印用户发来的信息
-	//KdPrint(("用户发来的信息是:%ls\n", rulePath));
-	////返回用户一些信息.
-	//ReturnOutputBufferLength = sizeof(buffer);
-	//RtlCopyMemory(OutputBuffer, buffer, *ReturnOutputBufferLength);
-	//释放内存
 	
 	ExFreePool(cachePath.Buffer);
 	cachePath.Buffer = NULL;

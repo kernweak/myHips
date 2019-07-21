@@ -33,6 +33,7 @@ public:
 	CString m_ruleState;
 	virtual BOOL OnInitDialog();
 	afx_msg void OnBnClickedButtonDelfile();
+	CListCtrl m_listCtrl;
 };
 
 const PWSTR FQDRVPortName = L"\\FQDRVPort";
@@ -98,6 +99,8 @@ void AddToDriver(WCHAR * filename, IOMonitorCommand cmd);
 void DeleteFromDriver(WCHAR * filename,IOMonitorCommand cmd);
 void PauseDriver();
 void RenewDriver();
+
+
 
 //引用层操作规则函数
 bool addDefaultRule();
