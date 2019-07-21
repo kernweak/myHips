@@ -28,6 +28,7 @@ void CHipsManager::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Text(pDX, IDC_EDIT1, m_ModuleRule);
 	DDX_Text(pDX, IDC_EDIT2, m_ruleState);
+	DDX_Control(pDX, IDC_LIST1, m_listCtrl);
 }
 
 
@@ -49,6 +50,13 @@ void CHipsManager::OnBnClickedButtonAddrule()
 	WCHAR * p = m_ModuleRule.GetBuffer();
 	AddToDriver(p, ADD_MODULE);
 	int ret = AddPathList(p, &g_ModuleRule);
+
+	int iLine = 0;
+	if (ret)
+	{
+		iLine = m_listCtrl.GetItemCount();
+		m_listCtrl.InsertItem(iLine, p);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -76,6 +84,20 @@ void CHipsManager::OnBnClickedButtonDelrule()
 	DeleteFromDriver(p, DELETE_MODULE);
 
 	int ret = DeletePathList(p, &g_ModuleRule);
+	int iLine = 0;
+	if (ret == 1)
+	{
+		while (m_listCtrl.DeleteItem(0));
+		pFileRule new_filename, current, precurrent;
+		current = precurrent = g_ModuleRule;
+		while (current != NULL)
+		{
+			int iLine = m_listCtrl.GetItemCount();
+			m_listCtrl.InsertItem(iLine, current->filePath);
+			current = current->pNext;
+		}
+		UpdateData(FALSE);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -154,4 +176,32 @@ void CHipsManager::OnBnClickedButtonRestartmoudle()
 
 		OutputDebugString(L"FilterSendMessage is ok!\n");
 	}
+}
+
+
+BOOL CHipsManager::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+	m_listCtrl.SetExtendedStyle(LVS_EX_FULLROWSELECT);
+	m_listCtrl.InsertColumn(0, _T("模块监控"), LVCFMT_LEFT, 240);
+
+	FILE *fp;
+	int iLine = 0;
+	_wfopen_s(&fp, L".\\MODULERULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		int ret = 0;
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		m_listCtrl.InsertItem(iLine, p1);
+	}
+	fclose(fp);
+	// TODO:  Add extra initialization here
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // EXCEPTION: OCX Property Pages should return FALSE
 }

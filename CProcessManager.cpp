@@ -29,6 +29,7 @@ void CProcessManager::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Text(pDX, IDC_EDIT1, m_ProcessRule);
 	DDX_Text(pDX, IDC_EDIT2, m_ruleState);
+	DDX_Control(pDX, IDC_LIST1, m_listCtrl);
 }
 
 
@@ -50,7 +51,13 @@ void CProcessManager::OnBnClickedButtonAdd()
 	UpdateData(TRUE);
 	WCHAR * p = m_ProcessRule.GetBuffer();
 	AddToDriver(p, ADD_PROCESS);
+	int iLine = 0;
 	int ret = AddPathList(p, &g_ProcessRule);
+	if (ret)
+	{
+		iLine = m_listCtrl.GetItemCount();
+		m_listCtrl.InsertItem(iLine, p);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -99,6 +106,21 @@ void CProcessManager::OnBnClickedButtonDel()
 	DeleteFromDriver(p, DELETE_PROCESS);
 
 	int ret = DeletePathList(p, &g_ProcessRule);
+
+	int iLine = 0;
+	if (ret == 1)
+	{
+		while (m_listCtrl.DeleteItem(0));
+		pFileRule new_filename, current, precurrent;
+		current = precurrent = g_ProcessRule;
+		while (current != NULL)
+		{
+			int iLine = m_listCtrl.GetItemCount();
+			m_listCtrl.InsertItem(iLine, current->filePath);
+			current = current->pNext;
+		}
+		UpdateData(FALSE);
+	}
 	switch (ret)
 	{
 	case 1:
@@ -170,6 +192,24 @@ void CProcessManager::OnBnClickedButtonRestart()
 BOOL CProcessManager::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
+	m_listCtrl.SetExtendedStyle(LVS_EX_FULLROWSELECT);
+	m_listCtrl.InsertColumn(0, _T("进程过滤规则"), LVCFMT_LEFT, 240);
+
+	FILE *fp;
+	int iLine = 0;
+	_wfopen_s(&fp, L".\\PROCESSRULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		int ret = 0;
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		m_listCtrl.InsertItem(iLine, p1);
+	}
+	fclose(fp);
 
 	// TODO:  Add extra initialization here
 	//addDefaultProcessRule();

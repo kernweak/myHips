@@ -27,5 +27,7 @@ public:
 	afx_msg void OnBnClickedButtonDelrule();
 	afx_msg void OnBnClickedButtonPausemoudle();
 	afx_msg void OnBnClickedButtonRestartmoudle();
+	CListCtrl m_listCtrl;
+	virtual BOOL OnInitDialog();
 };
 bool writeToMoudleMonFile();

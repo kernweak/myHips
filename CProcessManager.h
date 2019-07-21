@@ -28,6 +28,7 @@ public:
 	afx_msg void OnBnClickedButtonPause();
 	afx_msg void OnBnClickedButtonRestart();
 	virtual BOOL OnInitDialog();
+	CListCtrl m_listCtrl;
 };
 
 bool writeToProcessMonFile();

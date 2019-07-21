@@ -951,7 +951,6 @@ BOOL CFileManager::OnInitDialog()
 		WCHAR *p1;
 		fgetws(p, MAX_PATH, fp);
 		p1 = NopEnter(p);
-		AddToDriver(p1, ADD_PATH);
 		m_listCtrl.InsertItem(iLine, p1);
 	}
 	fclose(fp);
