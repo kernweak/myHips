@@ -360,7 +360,6 @@ void NTAPI WallALEConnectClassify
 	kfree(ProtocolName);
 	//classifyOut->actionType = FWP_ACTION_PERMIT;//允许连接
 	//禁止IE联网（设置“行动类型”为FWP_ACTION_BLOCK）
-	 //if(wcsstr((PWCHAR)inMetaValues->processPath->data,L"iexplore.exe"))
 	if((isOpenNet==1)&&(searchModuleRule(inMetaValues->processPath->data,&m_pNetRejectNames)))
 	 {
 	 classifyOut->actionType = FWP_ACTION_BLOCK;
