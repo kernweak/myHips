@@ -16,6 +16,8 @@ Environment:
 	Kernel mode
 
 --*/
+
+
 #ifndef __FQDRV_H__
 #define __FQDRV_H__
 
@@ -50,6 +52,10 @@ typedef enum _IOMONITOR_COMMAND {  //操作命令
 	PAUSE_MODULE,
 	RESTART_MODULE,
 	DELETE_FILE,
+	ADD_NETREJECT,
+	DELETE_NETREJECT,
+	PAUSE_NETMON,
+	RESTART_NETMON,
 } IOMonitorCommand;
 
 typedef enum _result {  //操作命令
@@ -67,7 +73,8 @@ typedef enum _result {  //操作命令
 	MRESTART_PROCESS,
 	MPAUSE_MODULE,
 	MRESTART_MODULE,
-
+	MPAUSE_NETMON,
+	MRESTART_NETMON,
 } RuleResult;
 
 typedef struct filenames {      //路径链表结点
@@ -284,4 +291,9 @@ BOOLEAN searchModuleRule(WCHAR *path, pFilenames *headFilenames);
 //删除文件相关
 NTSTATUS myDelFile(const WCHAR* fileName);
 NTSTATUS myDelFileDir(const WCHAR * directory);
+
+
+
+//WFP相关
+
 #endif /* __FQDRV_H__ */

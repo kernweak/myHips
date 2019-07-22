@@ -36,6 +36,7 @@ HANDLE g_port = 0;
 pFileRule g_fileRule = NULL;
 pFileRule g_ProcessRule = NULL;
 pFileRule g_ModuleRule = NULL;
+pFileRule g_NetRule = NULL;
 typedef struct _SCANNER_THREAD_CONTEXT {
 
 	HANDLE Port;
@@ -521,6 +522,7 @@ void CFileManager::OnBnClickedButtonFilemon()
 	bool ret=addDefaultRule();
 	addDefaultProcessRule();
 	addDefaultModuleRule();
+	addDefaultNetRejectRule();
 	//if(!ret){
 	//	MessageBoxW(NULL, L"读取文件失败", MB_OK);
 	//
@@ -778,6 +780,24 @@ bool addDefaultModuleRule()
 	return true;
 
 
+}
+bool addDefaultNetRejectRule()
+{
+	FILE *fp;
+	_wfopen_s(&fp, L".\\NETRULE.txt", L"a+");
+	if (fp == NULL)
+		return FALSE;
+	while (!feof(fp))
+	{
+		WCHAR p[MAX_PATH] = { 0 };
+		WCHAR *p1;
+		fgetws(p, MAX_PATH, fp);
+		p1 = NopEnter(p);
+		AddToDriver(p1, ADD_NETREJECT);
+		AddPathList(p1, &g_NetRule);
+	}
+	fclose(fp);
+	return true;
 }
 
 

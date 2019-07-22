@@ -5,7 +5,82 @@
 #include "FQDrv.h"
 #include "commonFun.h"
 #include <ntimage.h>
+
+//#pragma comment(lib,"ntoskrnl.lib")
+//#pragma comment(lib,"ndis.lib")
+//#pragma comment(lib,"fwpkclnt.lib")
+//#pragma comment(lib,"uuid.lib")
+#define NDIS61
+
+#include <ntddk.h>
+#pragma warning(push)
+#pragma warning(disable:4201)       // unnamed struct/union
+#pragma warning(disable:4995)
+#include <fwpsk.h>
+#pragma warning(pop)
+#include <ndis.h>
+#include <fwpmk.h>
+#include <limits.h>
+#include <ws2ipdef.h>
+#include <in6addr.h>
+#include <ip2string.h>
+#include <strsafe.h>
+#define INITGUID
+#include <guiddef.h>
+#define bool BOOLEAN
+#define true TRUE 
+#define false FALSE
+#define DEVICE_NAME L"\\Device\\WFP_TEST"
+#define DEVICE_DOSNAME L"\\DosDevices\\WFP_TEST"
+#define kmalloc(_s) ExAllocatePoolWithTag(NonPagedPool, _s, 'SYSQ')
+#define kfree(_p) ExFreePool(_p)
+
+
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
+
+
+DEFINE_GUID // {6812FC83-7D3E-499a-A012-55E0D85F348B}
+(
+	GUID_ALE_AUTH_CONNECT_CALLOUT_V4,
+	0x6812fc83,
+	0x7d3e,
+	0x499a,
+	0xa0, 0x12, 0x55, 0xe0, 0xd8, 0x5f, 0x34, 0x8b
+);
+
+PDEVICE_OBJECT  gDevObj;
+
+HANDLE	gEngineHandle = 0;
+HANDLE	gInjectHandle = 0;
+//CalloutId
+UINT32	gAleConnectCalloutId = 0;
+//FilterId
+UINT64	gAleConnectFilterId = 0;
+
+/*
+	以下两个回调函数没啥用
+*/
+NTSTATUS NTAPI WallNotifyFn
+(
+	IN FWPS_CALLOUT_NOTIFY_TYPE  notifyType,
+	IN const GUID  *filterKey,
+	IN const FWPS_FILTER  *filter
+)
+{
+	return STATUS_SUCCESS;
+}
+
+VOID NTAPI WallFlowDeleteFn
+(
+	IN UINT16  layerId,
+	IN UINT32  calloutId,
+	IN UINT64  flowContext
+)
+{
+	return;
+}
+
+
 //注册表相关
 #define REGISTRY_POOL_TAG 'pRE'
 
@@ -54,12 +129,70 @@ UNICODE_STRING g_LastDelFileName = { 0 };
 //  Function prototypes
 //
 pFilenames m_pfilenames=NULL;//文件规则链表
+ERESOURCE  g_fileLock;
+
 pFilenames m_pProcessNames = NULL;//进程规则链表
+ERESOURCE  g_processLock;
+
 pFilenames m_pMoudleNames = NULL;//模块规则链表
+ERESOURCE  g_moduleLock;
+
+pFilenames m_pNetRejectNames = NULL;//禁止网络访问规则链表
+ERESOURCE  g_NetRejectLock;
+
+ULONG g_ulCurrentWaitID = 0;//攻击事件ID
+
+VOID __stdcall LockWrite(ERESOURCE *lpLock)
+{
+	KeEnterCriticalRegion();
+	ExAcquireResourceExclusiveLite(lpLock, TRUE);
+}
+
+
+VOID __stdcall UnLockWrite(ERESOURCE *lpLock)
+{
+	ExReleaseResourceLite(lpLock);
+	KeLeaveCriticalRegion();
+}
+
+
+VOID __stdcall LockRead(ERESOURCE *lpLock)
+{
+	KeEnterCriticalRegion();
+	ExAcquireResourceSharedLite(lpLock, TRUE);
+}
+
+
+VOID __stdcall LockReadStarveWriter(ERESOURCE *lpLock)
+{
+	KeEnterCriticalRegion();
+	ExAcquireSharedStarveExclusive(lpLock, TRUE);
+}
+
+
+VOID __stdcall UnLockRead(ERESOURCE *lpLock)
+{
+	ExReleaseResourceLite(lpLock);
+	KeLeaveCriticalRegion();
+}
+
+
+VOID __stdcall InitLock(ERESOURCE *lpLock)
+{
+	ExInitializeResourceLite(lpLock);
+}
+
+VOID __stdcall DeleteLock(ERESOURCE *lpLock)
+{
+	ExDeleteResourceLite(lpLock);
+}
+
+
 ULONG isOpenFilter = 1;
 ULONG isOpenReg = 1;
 ULONG isOpenProcess = 1;
 ULONG isOpenModule = 1;
+ULONG isOpenNet = 1;
 NTSTATUS
 FQDRVPortConnect(
 	__in PFLT_PORT ClientPort,
@@ -97,6 +230,9 @@ FQDRVpScanFileInUserMode(
 #pragma alloc_text(PAGE, FQDRVPreSetInforMation)
 #pragma alloc_text(PAGE, FQDRVPostSetInforMation)
 #endif
+
+
+
 
 
 //
@@ -165,6 +301,238 @@ const FLT_REGISTRATION FilterRegistration = {
 //
 ////////////////////////////////////////////////////////////////////////////
 
+
+//协议代码转为名称
+char* ProtocolIdToName(UINT16 id)
+{
+	char *ProtocolName = kmalloc(16);
+	switch (id)	//http://www.ietf.org/rfc/rfc1700.txt
+	{
+	case 1:
+		strcpy_s(ProtocolName, 4 + 1, "ICMP");
+		break;
+	case 2:
+		strcpy_s(ProtocolName, 4 + 1, "IGMP");
+		break;
+	case 6:
+		strcpy_s(ProtocolName, 3 + 1, "TCP");
+		break;
+	case 17:
+		strcpy_s(ProtocolName, 3 + 1, "UDP");
+		break;
+	case 27:
+		strcpy_s(ProtocolName, 3 + 1, "RDP");
+		break;
+	default:
+		strcpy_s(ProtocolName, 7 + 1, "UNKNOWN");
+		break;
+	}
+	return ProtocolName;
+}
+
+//最重要的过滤函数
+//http://msdn.microsoft.com/en-us/library/windows/hardware/ff551238(v=vs.85).aspx
+void NTAPI WallALEConnectClassify
+(
+	IN const FWPS_INCOMING_VALUES0* inFixedValues,
+	IN const FWPS_INCOMING_METADATA_VALUES0* inMetaValues,
+	IN OUT void* layerData,
+	IN const void* classifyContext,
+	IN const FWPS_FILTER* filter,
+	IN UINT64 flowContext,
+	OUT FWPS_CLASSIFY_OUT* classifyOut
+)
+{
+	char *ProtocolName = NULL;
+	DWORD LocalIp, RemoteIP;
+	LocalIp = inFixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS].value.uint32;
+	RemoteIP = inFixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS].value.uint32;
+	ProtocolName = ProtocolIdToName(inFixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL].value.uint16);
+	//DbgPrint("[WFP]IRQL=%d;PID=%ld;Path=%S;Local=%u.%u.%u.%u:%d;Remote=%u.%u.%u.%u:%d;Protocol=%s\n",
+	//	(USHORT)KeGetCurrentIrql(),
+	//	(DWORD)(inMetaValues->processId),
+	//	(PWCHAR)inMetaValues->processPath->data,	//NULL,//
+	//	(LocalIp >> 24) & 0xFF, (LocalIp >> 16) & 0xFF, (LocalIp >> 8) & 0xFF, LocalIp & 0xFF,
+	//	inFixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_PORT].value.uint16,
+	//	(RemoteIP >> 24) & 0xFF, (RemoteIP >> 16) & 0xFF, (RemoteIP >> 8) & 0xFF, RemoteIP & 0xFF,
+	//	inFixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT].value.uint16,
+	//	ProtocolName);
+	kfree(ProtocolName);
+	//classifyOut->actionType = FWP_ACTION_PERMIT;//允许连接
+	//禁止IE联网（设置“行动类型”为FWP_ACTION_BLOCK）
+	 //if(wcsstr((PWCHAR)inMetaValues->processPath->data,L"iexplore.exe"))
+	if((isOpenNet==1)&&(searchModuleRule(inMetaValues->processPath->data,&m_pNetRejectNames)))
+	 {
+	 classifyOut->actionType = FWP_ACTION_BLOCK;
+	 classifyOut->rights &= ~FWPS_RIGHT_ACTION_WRITE;
+	 classifyOut->flags |= FWPS_CLASSIFY_OUT_FLAG_ABSORB;
+	 DbgPrint("%S静止连网",(PWCHAR)inMetaValues->processPath->data);
+	 }
+	 else
+	 {
+		 classifyOut->actionType = FWP_ACTION_PERMIT;//允许连接
+	 }
+	return;
+}
+
+NTSTATUS RegisterCalloutForLayer
+(
+	IN const GUID* layerKey,
+	IN const GUID* calloutKey,
+	IN FWPS_CALLOUT_CLASSIFY_FN classifyFn,
+	IN FWPS_CALLOUT_NOTIFY_FN notifyFn,
+	IN FWPS_CALLOUT_FLOW_DELETE_NOTIFY_FN flowDeleteNotifyFn,
+	OUT UINT32* calloutId,
+	OUT UINT64* filterId
+)
+{
+	NTSTATUS        status = STATUS_SUCCESS;
+	FWPS_CALLOUT    sCallout = { 0 };
+	FWPM_FILTER     mFilter = { 0 };
+	FWPM_FILTER_CONDITION mFilter_condition[1] = { 0 };
+	FWPM_CALLOUT    mCallout = { 0 };
+	FWPM_DISPLAY_DATA mDispData = { 0 };
+	BOOLEAN         bCalloutRegistered = FALSE;
+	sCallout.calloutKey = *calloutKey;
+	sCallout.classifyFn = classifyFn;
+	sCallout.flowDeleteFn = flowDeleteNotifyFn;
+	sCallout.notifyFn = notifyFn;
+	//要使用哪个设备对象注册
+	status = FwpsCalloutRegister(gDevObj, &sCallout, calloutId);
+	if (!NT_SUCCESS(status))
+		goto exit;
+	bCalloutRegistered = TRUE;
+	mDispData.name = L"WFP TEST";
+	mDispData.description = L"TESLA.ANGELA's WFP TEST";
+	//你感兴趣的内容
+	mCallout.applicableLayer = *layerKey;
+	//你感兴趣的内容的GUID
+	mCallout.calloutKey = *calloutKey;
+	mCallout.displayData = mDispData;
+	//添加回调函数
+	status = FwpmCalloutAdd(gEngineHandle, &mCallout, NULL, NULL);
+	if (!NT_SUCCESS(status))
+		goto exit;
+	mFilter.action.calloutKey = *calloutKey;
+	//在callout里决定
+	mFilter.action.type = FWP_ACTION_CALLOUT_TERMINATING;
+	mFilter.displayData.name = L"WFP TEST";
+	mFilter.displayData.description = L"TESLA.ANGELA's WFP TEST";
+	mFilter.layerKey = *layerKey;
+	mFilter.numFilterConditions = 0;
+	mFilter.filterCondition = mFilter_condition;
+	mFilter.subLayerKey = FWPM_SUBLAYER_UNIVERSAL;
+	mFilter.weight.type = FWP_EMPTY;
+	//添加过滤器
+	status = FwpmFilterAdd(gEngineHandle, &mFilter, NULL, filterId);
+	if (!NT_SUCCESS(status))
+		goto exit;
+exit:
+	if (!NT_SUCCESS(status))
+	{
+		if (bCalloutRegistered)
+		{
+			FwpsCalloutUnregisterById(*calloutId);
+		}
+	}
+	return status;
+}
+
+NTSTATUS WallRegisterCallouts()
+{
+	NTSTATUS    status = STATUS_SUCCESS;
+	BOOLEAN     bInTransaction = FALSE;
+	BOOLEAN     bEngineOpened = FALSE;
+	FWPM_SESSION session = { 0 };
+	session.flags = FWPM_SESSION_FLAG_DYNAMIC;
+	//开启WFP引擎
+	status = FwpmEngineOpen(NULL,
+		RPC_C_AUTHN_WINNT,
+		NULL,
+		&session,
+		&gEngineHandle);
+	if (!NT_SUCCESS(status))
+		goto exit;
+	bEngineOpened = TRUE;
+	//确认过滤权限
+	status = FwpmTransactionBegin(gEngineHandle, 0);
+	if (!NT_SUCCESS(status))
+		goto exit;
+	bInTransaction = TRUE;
+	//注册回调函数
+	status = RegisterCalloutForLayer(
+		&FWPM_LAYER_ALE_AUTH_CONNECT_V4,
+		&GUID_ALE_AUTH_CONNECT_CALLOUT_V4,
+		WallALEConnectClassify,
+		WallNotifyFn,
+		WallFlowDeleteFn,
+		&gAleConnectCalloutId,
+		&gAleConnectFilterId);
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("RegisterCalloutForLayer-FWPM_LAYER_ALE_AUTH_CONNECT_V4 failed!\n");
+		goto exit;
+	}
+	//确认所有内容并提交，让回调函数正式发挥作用
+	status = FwpmTransactionCommit(gEngineHandle);
+	if (!NT_SUCCESS(status))
+		goto exit;
+	bInTransaction = FALSE;
+exit:
+	if (!NT_SUCCESS(status))
+	{
+		if (bInTransaction)
+		{
+			FwpmTransactionAbort(gEngineHandle);
+		}
+		if (bEngineOpened)
+		{
+			FwpmEngineClose(gEngineHandle);
+			gEngineHandle = 0;
+		}
+	}
+	return status;
+}
+
+NTSTATUS WallUnRegisterCallouts()
+{
+	if (gEngineHandle != 0)
+	{
+		//删除FilterId
+		FwpmFilterDeleteById(gEngineHandle, gAleConnectFilterId);
+		//删除CalloutId
+		FwpmCalloutDeleteById(gEngineHandle, gAleConnectCalloutId);
+		//清空FilterId
+		gAleConnectFilterId = 0;
+		//反注册CalloutId
+		FwpsCalloutUnregisterById(gAleConnectCalloutId);
+		//清空CalloutId
+		gAleConnectCalloutId = 0;
+		//关闭引擎
+		FwpmEngineClose(gEngineHandle);
+		gEngineHandle = 0;
+	}
+	return STATUS_SUCCESS;
+}
+
+VOID DriverUnload(PDRIVER_OBJECT driverObject)
+{
+	NTSTATUS status;
+
+	status = WallUnRegisterCallouts();
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("[WFP_TEST]WallUnRegisterCallouts failed!\n");
+		return;
+	}
+	if (gDevObj)
+	{
+		IoDeleteDevice(gDevObj);
+		gDevObj = NULL;
+	}
+	DbgPrint("[WFP_TEST] unloaded!\n");
+}
+
 NTSTATUS
 DriverEntry(
 	__in PDRIVER_OBJECT DriverObject,
@@ -176,7 +544,47 @@ DriverEntry(
 	PSECURITY_DESCRIPTOR sd;
 	NTSTATUS status;
 
-	UNREFERENCED_PARAMETER(RegistryPath);
+	//UNREFERENCED_PARAMETER(RegistryPath);
+	//DriverObject->DriverUnload = DriverUnload;
+
+
+	UNICODE_STRING  deviceName = { 0 };
+	UNICODE_STRING  deviceDosName = { 0 };
+
+	DriverObject->DriverUnload = DriverUnload;
+	RtlInitUnicodeString(&deviceName, DEVICE_NAME);
+	status = IoCreateDevice(DriverObject,
+		0,
+		&deviceName,
+		FILE_DEVICE_NETWORK,
+		0,
+		FALSE,
+		&gDevObj);
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("[WFP_TEST]IoCreateDevice failed!\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+	RtlInitUnicodeString(&deviceDosName, DEVICE_DOSNAME);
+	status = IoCreateSymbolicLink(&deviceDosName, &deviceName);
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("[WFP_TEST]Create Symbolink name failed!\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+	status = WallRegisterCallouts();
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("[WFP_TEST]WallRegisterCallouts failed!\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+	DbgPrint("[WFP_TEST] loaded! WallRegisterCallouts() success!\n");
+
+
+
+	InitLock(&g_fileLock);
+	InitLock(&g_processLock);
+	InitLock(&g_moduleLock);
 
 	g_LastDelFileName.Buffer = ExAllocatePool(NonPagedPool, MAX_PATH * 2);
 	g_LastDelFileName.Length = g_LastDelFileName.MaximumLength = MAX_PATH * 2;
@@ -204,6 +612,13 @@ DriverEntry(
 	status = FltRegisterFilter(DriverObject,
 		&FilterRegistration,
 		&FQDRVData.Filter);
+	//status = WallRegisterCallouts();
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("[WFP_TEST]WallRegisterCallouts failed!\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+	DbgPrint("[WFP_TEST] loaded! WallRegisterCallouts() success!\n");
 
 
 	if (!NT_SUCCESS(status)) {
@@ -331,11 +746,26 @@ FQDRVUnload(
 	//
 	//  Unregister the filter
 	//
-
+	NTSTATUS status = STATUS_SUCCESS;
 	FltUnregisterFilter(FQDRVData.Filter);
 	PtRegisterUnInit();
 	PtProcessUnInit();
 	PtModuleUnInit();
+	//status = WallUnRegisterCallouts();
+	//if (!NT_SUCCESS(status))
+	//{
+	//	DbgPrint("[WFP_TEST]WallUnRegisterCallouts failed!\n");
+	//	return;
+	//}
+	//DbgPrint("[WFP_TEST]WallUnRegisterCallouts success!\n");
+	//if (gDevObj)
+	//{
+	//	gDevObj = NULL;
+	//}
+
+	DeleteLock(&g_fileLock);
+	DeleteLock(&g_processLock); 
+	DeleteLock(&g_moduleLock);
 	return STATUS_SUCCESS;
 }
 
@@ -476,8 +906,9 @@ FQDRVPostCreate(
 		//DbgPrint(" tmp路径是%S\n", tmp);
 
 		//scanFile = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+		//LockRead(&g_fileLock);
 		scanFile = searchRule(tmp,&m_pfilenames);
-
+		//UnLockRead(&g_fileLock);
 		FltReleaseFileNameInformation(nameInfo);
 
 		if (!scanFile) {
@@ -570,7 +1001,9 @@ BOOLEAN isNeedWatchFile(PFLT_CALLBACK_DATA Data)
 	wcsncpy_s(tmp, nameInfo->Name.Length, nameInfo->Name.Buffer, nameInfo->Name.Length);
 	//RtlInitUnicodeString(&ustrRule, L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.SYS");
 	//Ret = IsPatternMatch(L"\\*\\*\\WINDOWS\\SYSTEM32\\*\\*.*", tmp, TRUE);
+	//LockRead(&g_fileLock);
 	Ret=searchRule(tmp,&m_pfilenames);
+	//UnLockRead(&g_fileLock);
 	FltReleaseFileNameInformation(nameInfo);
 	return Ret;
 }
@@ -832,16 +1265,16 @@ FQDRVpScanFileInUserMode(
 
 			FltReleaseFileNameInformation(pOutReNameinfo);
 		}
-
+		LARGE_INTEGER WaitTimeOut = { 0 };
 		replyLength = sizeof(FQDRV_REPLY);
-
+		WaitTimeOut.QuadPart = -20 * 10000000;
 		status = FltSendMessage(FQDRVData.Filter,
 			&FQDRVData.ClientPort,
 			notification,
 			sizeof(FQDRV_NOTIFICATION),
 			notification,
 			&replyLength,
-			NULL);
+			&WaitTimeOut);
 
 		if (STATUS_SUCCESS == status) {
 
@@ -943,13 +1376,19 @@ NTSTATUS MessageNotifyCallback(
 	switch (command)
 	{
 	case DEFAULT_PATH:
+		//LockWrite(&g_fileLock);
 		uResult=AddPathList(&cachePath,&m_pfilenames);
+		//LockWrite(&g_fileLock);
 		break;
 	case ADD_PATH:
+		//LockWrite(&g_fileLock);
 		uResult=AddPathList(&cachePath, &m_pfilenames);
+		//LockWrite(&g_fileLock);
 		break;
 	case DELETE_PATH:
+		//LockWrite(&g_fileLock);
 		uResult = DeletePathList(&cachePath, &m_pfilenames);
+		//LockWrite(&g_fileLock);
 		break;
 	case CLOSE_PATH:
 		isOpenFilter = 0;
@@ -1008,7 +1447,24 @@ NTSTATUS MessageNotifyCallback(
 			uResult = DELETE_FAITH;
 		}
 		break;
-		
+	case ADD_NETREJECT:
+		//LockWrite(&g_fileLock);
+		uResult = AddPathList(&cachePath, &m_pNetRejectNames);
+		//LockWrite(&g_fileLock);
+		break;
+	case DELETE_NETREJECT:
+		//LockWrite(&g_fileLock);
+		uResult = DeletePathList(&cachePath, &m_pNetRejectNames);
+		//LockWrite(&g_fileLock);
+		break;
+	case PAUSE_NETMON:
+		isOpenNet = 0;
+		uResult = MPAUSE_NETMON;
+		break;
+	case RESTART_NETMON:
+		isOpenNet = 1;
+		uResult = MRESTART_NETMON;
+		break;
 	default:
 		break;
 	}
@@ -1060,6 +1516,12 @@ NTSTATUS MessageNotifyCallback(
 		break;
 	case MRESTART_MODULE:
 		wcscpy_s(buffer, wcslen(L"RESTART_MODULE") + 1, L"RESTART_MODULE");
+		break;
+	case MPAUSE_NETMON:
+		wcscpy_s(buffer, wcslen(L"PAUSE_NETMON") + 1, L"PAUSE_NETMON");
+		break;
+	case MRESTART_NETMON:
+		wcscpy_s(buffer, wcslen(L"RESTART_NETMON") + 1, L"RESTART_NETMON");
 		break;
 	default:
 		break;
@@ -2175,3 +2637,5 @@ NTSTATUS myDelFileDir(const WCHAR * directory)
 	}
 	return status;
 }
+
+

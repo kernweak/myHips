@@ -83,6 +83,10 @@ typedef enum _IOMONITOR_COMMAND {
 	PAUSE_MODULE,
 	RESTART_MODULE,
 	DELETE_FILE,
+	ADD_NETREJECT,
+	DELETE_NETREJECT,
+	PAUSE_NETMON,
+	RESTART_NETMON,
 } IOMonitorCommand;
 
 
@@ -116,6 +120,8 @@ void RenewRegMon();
 extern pFileRule g_fileRule;
 extern pFileRule g_ProcessRule;
 extern pFileRule g_ModuleRule;
+extern pFileRule g_NetRule;
 
 bool addDefaultProcessRule();
 bool addDefaultModuleRule();
+bool addDefaultNetRejectRule();

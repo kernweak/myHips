@@ -20,4 +20,16 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
 
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedButtonAdd();
+	afx_msg void OnBnClickedButtonDel();
+	CString m_ruleState;
+	CString m_NetRule;
+	CListCtrl m_listCtrl;
+	virtual BOOL OnInitDialog();
+	afx_msg void OnBnClickedButtonPause();
+	afx_msg void OnBnClickedButtonRestart();
 };
+
+
+bool writeToNetMonFile();
