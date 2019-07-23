@@ -130,8 +130,8 @@ BOOL CFQHIPSDlg::OnInitDialog()
 	m_tabCtrl.InsertItem(3, _T("注册表管理"));
 	m_tabCtrl.InsertItem(4, _T("进程管理"));
 	m_tabCtrl.InsertItem(5, _T("防火墙"));
-	m_tabCtrl.InsertItem(6, _T("Ark功能"));
-	m_tabCtrl.InsertItem(7, _T("其他功能"));
+	m_tabCtrl.InsertItem(6, _T("Ark功能（未完成）"));
+	m_tabCtrl.InsertItem(7, _T("其他功能（关闭）"));
 	m_tabCtrl.SetPadding(10);
 	m_tabCtrl.SetMinTabWidth(50);
 	m_tabCtrl.SetItemSize(CSize(50, 25));

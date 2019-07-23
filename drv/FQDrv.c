@@ -521,7 +521,7 @@ VOID DriverUnload(PDRIVER_OBJECT driverObject)
 	status = WallUnRegisterCallouts();
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrint("[WFP_TEST]WallUnRegisterCallouts failed!\n");
+		DbgPrint("网络监控开启 SUCCESS\n");
 		return;
 	}
 	if (gDevObj)
@@ -529,7 +529,7 @@ VOID DriverUnload(PDRIVER_OBJECT driverObject)
 		IoDeleteDevice(gDevObj);
 		gDevObj = NULL;
 	}
-	DbgPrint("[WFP_TEST] unloaded!\n");
+	DbgPrint("网络监控开启 failed\n");
 }
 
 NTSTATUS
@@ -561,23 +561,23 @@ DriverEntry(
 		&gDevObj);
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrint("[WFP_TEST]IoCreateDevice failed!\n");
+		DbgPrint("WFP设备IoCreateDevice failed!\n");
 		return STATUS_UNSUCCESSFUL;
 	}
 	RtlInitUnicodeString(&deviceDosName, DEVICE_DOSNAME);
 	status = IoCreateSymbolicLink(&deviceDosName, &deviceName);
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrint("[WFP_TEST]Create Symbolink name failed!\n");
+		DbgPrint("WFP设备Create Symbolink name failed!\n");
 		return STATUS_UNSUCCESSFUL;
 	}
 	status = WallRegisterCallouts();
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrint("[WFP_TEST]WallRegisterCallouts failed!\n");
+		DbgPrint("WFP设备WallRegisterCallouts failed!\n");
 		return STATUS_UNSUCCESSFUL;
 	}
-	DbgPrint("[WFP_TEST] loaded! WallRegisterCallouts() success!\n");
+	DbgPrint("WFP设备 loaded! WallRegisterCallouts() success!\n");
 
 
 
@@ -614,10 +614,10 @@ DriverEntry(
 	//status = WallRegisterCallouts();
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrint("[WFP_TEST]WallRegisterCallouts failed!\n");
+		DbgPrint("WFP设备WallRegisterCallouts failed!\n");
 		return STATUS_UNSUCCESSFUL;
 	}
-	DbgPrint("[WFP_TEST] loaded! WallRegisterCallouts() success!\n");
+	DbgPrint("WFP设备 loaded! WallRegisterCallouts() success!\n");
 
 
 	if (!NT_SUCCESS(status)) {
@@ -750,17 +750,6 @@ FQDRVUnload(
 	PtRegisterUnInit();
 	PtProcessUnInit();
 	PtModuleUnInit();
-	//status = WallUnRegisterCallouts();
-	//if (!NT_SUCCESS(status))
-	//{
-	//	DbgPrint("[WFP_TEST]WallUnRegisterCallouts failed!\n");
-	//	return;
-	//}
-	//DbgPrint("[WFP_TEST]WallUnRegisterCallouts success!\n");
-	//if (gDevObj)
-	//{
-	//	gDevObj = NULL;
-	//}
 
 	DeleteLock(&g_fileLock);
 	DeleteLock(&g_processLock); 
@@ -2113,7 +2102,7 @@ VOID MyCreateProcessNotifyEx
 		}
 		else
 		{
-			DbgPrint("[monitor_create_process_x64]进程退出: %s", PsGetProcessImageFileName(Process));
+			DbgPrint("进程监控：进程退出: %s", PsGetProcessImageFileName(Process));
 		}
 
 		if (NULL != notification) {
@@ -2216,9 +2205,9 @@ VOID LoadImageNotifyRoutine
 				notification = ExAllocatePoolWithTag(NonPagedPool,
 					sizeof(FQDRV_NOTIFICATION),
 					'nacS');
-				DbgPrint("[LoadImageNotifyX64]%wZ\n", FullImageName);
+				DbgPrint("模块加载监控%wZ\n", FullImageName);
 				pDrvEntry = GetDriverEntryByImageBase(ImageInfo->ImageBase);
-				DbgPrint("[LoadImageNotifyX64]DriverEntry: %p\n", pDrvEntry);
+				DbgPrint("模块加载监控 模块的DriverEntry: %p\n", pDrvEntry);
 				UnicodeToChar(FullImageName, szFullImageName);
 				WCHAR newPath1[MAX_PATH] = { 0 };
 
@@ -2305,8 +2294,6 @@ BOOLEAN searchModuleRule(WCHAR *path, pFilenames *headFilenames)
 			//ToUpperString(tmp);
 			//DbgPrint("tmp is %ls,path is %ls", tmp, path);
 			//if (strstr(szFullImageName, "myTestDriver.sys"))
-			DbgPrint("tmp %ls/n", tmp);
-			DbgPrint("path %ls/n", path);
 			if (wcsstr(path, tmp))
 			{
 				return TRUE;
